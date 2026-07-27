@@ -9,8 +9,10 @@ from repowitness.tools.changed_files import ChangedFilesTool
 from repowitness.tools.contract_sources import ContractSourcesTool
 from repowitness.tools.diff import DiffTool
 from repowitness.tools.read import ReadRepositoryFileTool
+from repowitness.tools.repository_search import GlobRepositoryTool, GrepRepositoryTool
 from repowitness.tools.submit_rules import SubmitRulesTool
 from repowitness.tools.submit_assessments import SubmitAssessmentsTool
+from repowitness.tools import build_contract_tools, build_review_tools
 from repowitness.validation import validate_assessments
 
 
@@ -66,6 +68,61 @@ def test_contract_tools_only_accept_rules_backed_by_real_source_spans(tmp_path):
     assert collector.rules[0].statement == "Public APIs must stay compatible."
 
 
+def test_audit_tool_sets_never_register_mutating_or_subagent_tools(tmp_path):
+    catalog = _catalog(tmp_path)
+    repository = RepositoryView.open(tmp_path, base_ref="HEAD")
+    rules = RuleCollector(catalog)
+    evidence = EvidenceStore()
+    assessments = AssessmentCollector(())
+
+    contract_names = {
+        tool.name for tool in build_contract_tools(catalog, rules)
+    }
+    review_names = {
+        tool.name
+        for tool in build_review_tools(
+            repository,
+            evidence,
+            assessments,
+            (),
+        )
+    }
+
+    forbidden = {"bash", "write_file", "edit_file", "agent"}
+    assert contract_names == {"contract_sources", "submit_rules"}
+    assert forbidden.isdisjoint(review_names)
+    assert review_names == {
+        "changed_files",
+        "rules",
+        "check_results",
+        "read_diff",
+        "read_repository_file",
+        "glob_repository",
+        "grep_repository",
+        "submit_assessments",
+    }
+
+
+def test_contract_conflicts_require_real_spans_and_use_source_priority(tmp_path):
+    catalog = _catalog(tmp_path)
+    collector = RuleCollector(catalog)
+    span_id = catalog.spans[0].span_id
+
+    result = collector.submit(
+        [],
+        [
+            {
+                "source_span_ids": [span_id, "span-invented"],
+                "description": "Compatibility is both required and forbidden.",
+            }
+        ],
+    )
+
+    assert result["accepted_conflicts"] == []
+    assert result["rejected_conflicts"][0]["index"] == 0
+    assert collector.conflicts == ()
+
+
 def test_review_read_tools_issue_verifiable_evidence_handles(tmp_path):
     _catalog(tmp_path)
     (tmp_path / "app.py").write_text("def public_api():\n    return 1\n")
@@ -91,6 +148,38 @@ def test_review_read_tools_issue_verifiable_evidence_handles(tmp_path):
     assert code["content"] == "1\tdef public_api():\n2\t    return 2"
     assert evidence.get(diff["evidence_handle"]).content == diff["content"]
     assert evidence.get(code["evidence_handle"]).path == "app.py"
+
+
+def test_repository_search_tools_are_snapshot_bounded_and_issue_evidence(tmp_path):
+    _catalog(tmp_path)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("def public_api():\n    return 1\n")
+    (tmp_path / "src" / "app.txt").write_text("public_api\n")
+    _git(tmp_path, "add", "src")
+    _git(tmp_path, "commit", "-qm", "search fixtures")
+    repository = RepositoryView.open(tmp_path, base_ref="HEAD")
+    evidence = EvidenceStore()
+
+    files = json.loads(
+        GlobRepositoryTool(repository, evidence).execute(
+            "**/*.py",
+            revision="head",
+        )
+    )
+    matches = json.loads(
+        GrepRepositoryTool(repository, evidence).execute(
+            r"def\s+public_api",
+            include="**/*.py",
+            revision="head",
+        )
+    )
+
+    assert files["matches"] == ["src/app.py"]
+    assert matches["matches"] == [
+        {"path": "src/app.py", "line": 1, "text": "def public_api():"}
+    ]
+    assert evidence.get(files["evidence_handle"]).kind == "repository_glob"
+    assert evidence.get(matches["evidence_handle"]).kind == "repository_grep"
 
 
 def test_invalid_assessment_evidence_is_downgraded_to_unverified(tmp_path):
@@ -130,3 +219,51 @@ def test_invalid_assessment_evidence_is_downgraded_to_unverified(tmp_path):
     assert submitted["accepted"] == 1
     assert validated[0].verdict == "UNVERIFIED"
     assert validated[0].limitations == ("unknown evidence handle: evidence-invented",)
+
+
+def test_pass_cannot_cite_a_failing_deterministic_check(tmp_path):
+    catalog = _catalog(tmp_path)
+    rules = RuleCollector(catalog)
+    rules.submit(
+        [
+            {
+                "source_span_id": catalog.spans[0].span_id,
+                "statement": "Public APIs must stay compatible.",
+                "applies_to": ["**/*.py"],
+            }
+        ]
+    )
+    evidence = EvidenceStore()
+    failed = evidence.add(
+        kind="check_result",
+        revision="snapshot",
+        content=json.dumps(
+            {
+                "name": "pytest",
+                "status": "fail",
+                "summary": "1 test failed",
+                "details": "",
+            }
+        ),
+    )
+    assessments = AssessmentCollector(rules.rules)
+    assessments.submit(
+        [
+            {
+                "rule_id": rules.rules[0].rule_id,
+                "verdict": "PASS",
+                "evidence_handles": [failed.handle],
+                "rationale": "Tests cover compatibility.",
+                "next_step": "No action.",
+            }
+        ]
+    )
+
+    validated = validate_assessments(
+        rules.rules,
+        evidence,
+        assessments.assessments,
+    )
+
+    assert validated[0].verdict == "UNVERIFIED"
+    assert "PASS cannot cite a fail check result" in validated[0].limitations[0]

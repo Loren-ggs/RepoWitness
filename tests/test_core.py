@@ -1,6 +1,7 @@
 """Tests for core modules: config, context, session, imports."""
 
 from repowitness import Agent, LLM, Config, ALL_TOOLS, __version__
+from repowitness import config as config_module
 from repowitness import session as session_module
 from repowitness.context import ContextManager, estimate_tokens
 from repowitness.session import save_session, load_session, list_sessions
@@ -21,7 +22,7 @@ def _legacy_tool(name):
 
 
 def test_version():
-    assert __version__ == "0.1.0"
+    assert __version__ == "0.2.0"
 
 
 def test_public_api_exports():
@@ -40,6 +41,9 @@ def test_config_from_env(monkeypatch):
 
 def test_config_defaults(monkeypatch):
     # clear relevant env vars without leaking the change into other tests
+    monkeypatch.setattr(config_module, "_load_dotenv", lambda: None)
+    monkeypatch.delenv("REPOWITNESS_MODEL", raising=False)
+    monkeypatch.delenv("REPOWITNESS_MAX_TOKENS", raising=False)
     monkeypatch.delenv("CORECODER_MODEL", raising=False)
     monkeypatch.delenv("CORECODER_MAX_TOKENS", raising=False)
 

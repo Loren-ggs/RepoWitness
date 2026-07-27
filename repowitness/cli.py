@@ -12,6 +12,7 @@ from .config import Config
 from .domain import AuditRequest
 from .llm import LLM, LiteLLM
 from .reporting import render_json, render_markdown
+from .repository import RepositoryView
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -32,6 +33,15 @@ def _parser() -> argparse.ArgumentParser:
     )
     audit.add_argument("--base", required=True, help="Base Git ref")
     audit.add_argument(
+        "--contracts-ref",
+        choices=("base", "head", "worktree"),
+        default="base",
+        help=(
+            "Revision used to read repository contracts (default: base). "
+            "Use worktree explicitly when bootstrapping new rules."
+        ),
+    )
+    audit.add_argument(
         "--repository",
         default=".",
         help="Repository path (default: current directory)",
@@ -50,6 +60,27 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Exclude untracked, non-ignored files",
     )
+    audit.add_argument(
+        "--check-results",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="Import a provenance-bound RepoWitness evidence JSON file",
+    )
+    snapshot = subcommands.add_parser(
+        "snapshot",
+        help="Print the current repository snapshot identity for check evidence.",
+    )
+    snapshot.add_argument(
+        "--repository",
+        default=".",
+        help="Repository path (default: current directory)",
+    )
+    snapshot.add_argument(
+        "--no-untracked",
+        action="store_true",
+        help="Exclude untracked, non-ignored files from the fingerprint",
+    )
     return parser
 
 
@@ -63,6 +94,23 @@ def main(
     stdout = stdout or sys.stdout
     stderr = stderr or sys.stderr
     args = _parser().parse_args(argv)
+
+    if args.command == "snapshot":
+        try:
+            repository = RepositoryView.open(
+                Path(args.repository).expanduser().resolve(),
+                base_ref="HEAD",
+            )
+            print(
+                repository.snapshot_identity(
+                    include_untracked=not args.no_untracked
+                ),
+                file=stdout,
+            )
+            return 0
+        except Exception as exc:
+            print(f"RepoWitness snapshot failed: {exc}", file=stderr)
+            return 1
 
     if engine is None:
         config = Config.from_env()
@@ -86,6 +134,10 @@ def main(
         repository_path=Path(args.repository).expanduser().resolve(),
         base_ref=args.base,
         include_untracked=not args.no_untracked,
+        contracts_ref=args.contracts_ref,
+        check_result_paths=tuple(
+            Path(path).expanduser().resolve() for path in args.check_results
+        ),
     )
     try:
         report = engine.audit(request)

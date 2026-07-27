@@ -44,13 +44,20 @@ def report_to_dict(report: AuditReport) -> dict:
         "run": {
             "base_revision": report.base_revision,
             "head_revision": report.head_revision,
+            "snapshot": report.snapshot,
+            "contracts_ref": report.contracts_ref,
             "model": report.model,
             "mode": report.mode,
         },
         "summary": {
             "overall": report.overall,
             "counts": report.counts,
-            "rules_discovered": len(report.rules),
+            "rules_discovered": (
+                report.compiled_rule_count
+                if report.compiled_rule_count is not None
+                else len(report.rules)
+            ),
+            "rules_applicable": len(report.rules),
             "rules_evaluated": len(report.assessments),
         },
         "changes": [
@@ -66,6 +73,9 @@ def report_to_dict(report: AuditReport) -> dict:
             {
                 "path": source.path,
                 "revision": source.revision,
+                "kind": source.kind,
+                "scope_path": source.scope_path,
+                "priority": source.priority,
                 "spans": [
                     {
                         "span_id": span.span_id,
@@ -77,6 +87,24 @@ def report_to_dict(report: AuditReport) -> dict:
                 ],
             }
             for source in report.contracts
+        ],
+        "contract_changes": [
+            {
+                "path": change.path,
+                "status": change.status,
+                "old_path": change.old_path,
+            }
+            for change in report.contract_changes
+        ],
+        "conflicts": [
+            {
+                "conflict_id": conflict.conflict_id,
+                "source_span_ids": list(conflict.source_span_ids),
+                "description": conflict.description,
+                "resolution": conflict.resolution,
+                "resolved": conflict.resolved,
+            }
+            for conflict in report.conflicts
         ],
         "assessments": assessments,
         "issues": list(report.issues),
@@ -104,9 +132,44 @@ def render_markdown(report: AuditReport) -> str:
         "",
         f"- Base：`{payload['run']['base_revision']}`",
         f"- Head：`{payload['run']['head_revision']}`",
+        f"- Snapshot：`{payload['run']['snapshot']}`",
+        f"- 规范版本：`{payload['run']['contracts_ref']}`",
         f"- Model：`{payload['run']['model']}`",
         f"- Mode：`{payload['run']['mode']}`",
     ]
+
+    lines.extend(["", "## 规范来源", ""])
+    if payload["contracts"]:
+        for source in payload["contracts"]:
+            scope = source["scope_path"] or "全仓库"
+            lines.append(
+                f"- `{source['path']}` · {source['kind']} · "
+                f"`{source['revision']}` · 作用域 `{scope}`"
+            )
+    else:
+        lines.append("未发现可用的仓库规范文档。")
+
+    if payload["contract_changes"]:
+        lines.extend(["", "## 本次规范文档变更", ""])
+        lines.append(
+            "以下变更会单独提示；默认仍以 base 版本规范审查本次代码变更。"
+        )
+        lines.extend(
+            f"- `{change['path']}`（{change['status']}）"
+            for change in payload["contract_changes"]
+        )
+
+    if payload["conflicts"]:
+        lines.extend(["", "## 规范冲突", ""])
+        for conflict in payload["conflicts"]:
+            state = "已按优先级解析" if conflict["resolved"] else "需要人工确认"
+            lines.extend(
+                [
+                    f"- **{conflict['conflict_id']} · {state}**",
+                    f"  - 冲突：{conflict['description']}",
+                    f"  - 处理：{conflict['resolution']}",
+                ]
+            )
 
     if payload["issues"]:
         lines.extend(["", "## 审查限制", ""])

@@ -9,6 +9,8 @@
     "summary",
     "changes",
     "contracts",
+    "contract_changes",
+    "conflicts",
     "assessments",
     "issues"
   ],
@@ -21,6 +23,8 @@
       "required": [
         "base_revision",
         "head_revision",
+        "snapshot",
+        "contracts_ref",
         "model",
         "mode"
       ],
@@ -30,6 +34,16 @@
         },
         "head_revision": {
           "type": "string"
+        },
+        "snapshot": {
+          "type": "string"
+        },
+        "contracts_ref": {
+          "enum": [
+            "base",
+            "head",
+            "worktree"
+          ]
         },
         "model": {
           "type": "string"
@@ -46,6 +60,7 @@
         "overall",
         "counts",
         "rules_discovered",
+        "rules_applicable",
         "rules_evaluated"
       ],
       "properties": {
@@ -81,6 +96,10 @@
           "additionalProperties": false
         },
         "rules_discovered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rules_applicable": {
           "type": "integer",
           "minimum": 0
         },
@@ -133,6 +152,9 @@
         "required": [
           "path",
           "revision",
+          "kind",
+          "scope_path",
+          "priority",
           "spans"
         ],
         "properties": {
@@ -140,13 +162,92 @@
             "type": "string"
           },
           "revision": {
-            "const": "base"
+            "enum": [
+              "base",
+              "head",
+              "worktree"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "scope_path": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer"
           },
           "spans": {
             "type": "array",
             "items": {
               "$ref": "#/$defs/sourceSpan"
             }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "contract_changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "status",
+          "old_path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "added",
+              "modified",
+              "deleted",
+              "renamed"
+            ]
+          },
+          "old_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "conflict_id",
+          "source_span_ids",
+          "description",
+          "resolution",
+          "resolved"
+        ],
+        "properties": {
+          "conflict_id": {
+            "type": "string"
+          },
+          "source_span_ids": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string"
+          },
+          "resolved": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

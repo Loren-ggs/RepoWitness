@@ -14,9 +14,11 @@ review advice.
 
 RepoWitness combines:
 
-- authoritative repository contract documents;
+- repository contracts including `AGENTS.md`, README files, contribution and
+  security policies, ADRs, and architecture documents;
 - the current Git diff;
 - related repository files;
+- optional external check results bound to the exact audit snapshot;
 - evidence returned by read-only review tools.
 
 Every evaluated rule receives one verdict:
@@ -44,23 +46,28 @@ The audit does not:
 Inherited CoreCoder implementations remain in the source tree for future
 explicit use, but they are not registered in RepoWitness audit agents.
 
-## Current vertical slice
+## Current capabilities
 
-Version `0.1.0` currently supports:
+Version `0.2.0` currently supports:
 
 - `repowitness audit --base <ref>`;
-- authoritative root `AGENTS.md` rules read from the base revision;
+- base contracts by default, with explicit `head` and `worktree` bootstrap modes;
+- root and scoped `AGENTS.md`, root README files, `CONTRIBUTING.md`,
+  `SECURITY.md`, ADR, and architecture document discovery;
+- normative-only README extraction guidance;
+- deterministic source scope, rule glob, and priority filtering;
+- separate contract-change and explicit conflict reporting;
 - tracked, staged, unstaged, and untracked worktree changes;
 - a Contract Compiler Agent and a Review Agent using the same reused agent loop;
-- repository-confined diff and file-reading tools;
+- repository-confined diff, read, glob, and grep tools;
+- snapshot-bound standard check-result JSON ingestion;
 - canonical JSON and Markdown reports;
+- a composite GitHub Action that publishes to the Job Summary;
 - advisory exit behavior.
 
 Not implemented yet:
 
-- GitHub Actions publishing;
-- nested `AGENTS.md`, `CONTRIBUTING.md`, and ADR discovery;
-- JUnit/SARIF/check-result ingestion;
+- native JUnit and SARIF parsing (they can be converted to standard check JSON);
 - YAML configuration;
 - required-check or `--fail-on` behavior.
 
@@ -113,6 +120,54 @@ repowitness audit --base main --format markdown --output report.md
 The default target is the current worktree. Rules always come from the resolved
 base commit, so a change cannot relax `AGENTS.md` and then review itself against
 the relaxed text.
+
+Bootstrap contracts that do not exist on base explicitly:
+
+```bash
+repowitness audit --base main --contracts-ref worktree
+```
+
+Print the current snapshot identity and import matching deterministic results:
+
+```bash
+repowitness snapshot
+repowitness audit --base main --check-results .repowitness/pytest-result.json
+```
+
+The standard result envelope is:
+
+```json
+{
+  "schema_version": "1",
+  "snapshot": "<output of repowitness snapshot>",
+  "checks": [
+    {
+      "name": "pytest",
+      "status": "pass",
+      "summary": "106 tests passed"
+    }
+  ]
+}
+```
+
+## GitHub Actions
+
+Use the composite action after a full-history checkout:
+
+```yaml
+steps:
+  - uses: actions/checkout@v6
+    with:
+      fetch-depth: 0
+  - uses: Loren-ggs/RepoWitness@v0.2.0
+    with:
+      base: ${{ github.event.pull_request.base.sha }}
+    env:
+      REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
+```
+
+The Markdown report is appended to the GitHub Job Summary. The action remains
+advisory and does not fail the job for a `FAIL` assessment.
 
 The current release is advisory. A completed audit returns exit code `0` even
 when the report contains `FAIL`; repository, configuration, model, or report

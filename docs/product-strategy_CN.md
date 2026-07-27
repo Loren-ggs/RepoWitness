@@ -1,4 +1,4 @@
-# RepoWitness（仓证）产品策略与第一阶段实施边界
+# RepoWitness（仓证）产品策略与实施边界
 
 ## 1. 产品定位
 
@@ -240,3 +240,24 @@ repowitness audit --base main
 - JSON 和 Markdown 来自同一份 `AuditReport`；
 - advisory mode 下审查报告包含 `FAIL` 时仍正常退出；
 - 全量测试和静态检查通过。
+
+## 12. 第二阶段实现范围
+
+第二阶段保持第一阶段的只读、证据绑定和 advisory 边界，增加：
+
+1. 使用 `--contracts-ref base|head|worktree` 将 diff base 与规范来源版本分离；
+2. 自动发现根 README、`CONTRIBUTING.md`、`SECURITY.md`、ADR、架构文档，
+   以及变更路径祖先目录中的嵌套 `AGENTS.md`；
+3. README 只提取含明确约束语义的规范，不把介绍、教程和示例当作规则；
+4. 以规范来源目录作为强制作用域，再叠加模型提交的 `applies_to` glob；
+5. 记录来源类型和优先级，结构化输出显式规范冲突及其解析状态；
+6. 单独列出本次变更涉及的规范文档，默认仍以 base 规则审查；
+7. 为 Review Agent 增加只读 `rules`、`glob_repository`、
+   `grep_repository` 和 `check_results`；
+8. 支持导入 snapshot 严格匹配的标准 check-result JSON，但不执行检查；
+9. 提供 `repowitness snapshot` 生成外部证据绑定值；
+10. 提供 composite GitHub Action，并把 Markdown 写入 Job Summary。
+
+第二阶段仍不实现 YAML 配置、原生 JUnit/SARIF 解析、自动 PR 评论、
+Required Check 或 `--fail-on`。这些能力在现有来源发现、证据质量和误报率
+稳定后继续推进。

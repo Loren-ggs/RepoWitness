@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import hashlib
 from difflib import unified_diff
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -124,6 +125,108 @@ class RepositoryView:
                     changes.append(ChangedFile(path=path, status="added"))
 
         return sorted(changes, key=lambda change: change.path)
+
+    def list_files(self, *, revision: str = "head") -> tuple[str, ...]:
+        """List repository files without traversing outside the selected snapshot."""
+        if revision == "worktree":
+            raw = self._run_git_bytes(
+                self.root,
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "-z",
+            )
+        else:
+            ref = self._revision(revision)
+            raw = self._run_git_bytes(
+                self.root,
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "-z",
+                ref,
+                "--",
+            )
+        paths = raw.decode("utf-8", errors="surrogateescape").split("\0")
+        if revision != "worktree":
+            return tuple(sorted(path for path in paths if path))
+
+        existing = []
+        for path in paths:
+            if not path:
+                continue
+            relative = self._safe_relative_path(path)
+            resolved = (self.root / relative).resolve()
+            if resolved.is_relative_to(self.root) and resolved.is_file():
+                existing.append(path)
+        return tuple(sorted(existing))
+
+    def snapshot_identity(
+        self,
+        *,
+        include_untracked: bool = True,
+        exclude_paths: tuple[str, ...] = (),
+    ) -> str:
+        """Identify the exact reviewed worktree, or HEAD when it is clean."""
+        safe_exclusions = tuple(
+            self._safe_relative_path(path).as_posix() for path in exclude_paths
+        )
+        pathspecs = [".", *(f":(exclude){path}" for path in safe_exclusions)]
+        diff = self._run_git_bytes(
+            self.root,
+            "diff",
+            "--binary",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--ignore-submodules=all",
+            "HEAD",
+            "--",
+            *pathspecs,
+        )
+
+        paths = []
+        if include_untracked:
+            untracked = self._run_git_bytes(
+                self.root,
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+                "-z",
+            )
+            paths = sorted(
+                path
+                for path in untracked.decode(
+                    "utf-8",
+                    errors="surrogateescape",
+                ).split("\0")
+                if path and path not in safe_exclusions
+            )
+        if not diff and not paths:
+            return self.head_revision
+
+        digest = hashlib.sha256()
+        digest.update(self.head_revision.encode("ascii"))
+        digest.update(b"\0")
+        digest.update(diff)
+        if include_untracked:
+            for path in paths:
+                relative = self._safe_relative_path(path)
+                resolved = (self.root / relative).resolve()
+                if not resolved.is_relative_to(self.root) or not resolved.is_file():
+                    raise RepositoryError(
+                        f"cannot fingerprint unsafe untracked path: {path}"
+                    )
+                try:
+                    data = resolved.read_bytes()
+                except OSError as exc:
+                    raise RepositoryError(
+                        f"cannot fingerprint untracked path {path}: {exc}"
+                    ) from exc
+                digest.update(path.encode("utf-8", errors="surrogateescape"))
+                digest.update(b"\0")
+                digest.update(hashlib.sha256(data).digest())
+        return f"worktree:{digest.hexdigest()}"
 
     def diff(self, file_path: str, *, context_lines: int = 20) -> str:
         relative = self._safe_relative_path(file_path)

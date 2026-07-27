@@ -72,3 +72,25 @@ def test_repository_view_reports_tracked_and_untracked_changes_with_diff(tmp_pat
     assert "-    return 1" in view.diff("app.py")
     assert "+    return 2" in view.diff("app.py")
     assert "+def test_public_api():" in view.diff("new_test.py")
+
+
+def test_snapshot_identity_uses_head_when_clean_and_fingerprint_when_dirty(tmp_path):
+    repo = _committed_repository(tmp_path)
+    view = RepositoryView.open(repo, base_ref="HEAD")
+
+    assert view.snapshot_identity() == view.head_revision
+
+    (repo / "app.py").write_text("def public_api():\n    return 2\n")
+    dirty = view.snapshot_identity()
+
+    assert dirty.startswith("worktree:")
+    assert dirty != view.head_revision
+
+
+def test_worktree_file_listing_excludes_deleted_index_entries(tmp_path):
+    repo = _committed_repository(tmp_path)
+    (repo / "app.py").unlink()
+    view = RepositoryView.open(repo, base_ref="HEAD")
+
+    assert "app.py" not in view.list_files(revision="worktree")
+    assert "app.py" in view.list_files(revision="head")

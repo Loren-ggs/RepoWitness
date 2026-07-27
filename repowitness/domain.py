@@ -27,6 +27,9 @@ class ContractSource:
     path: str
     revision: str
     spans: tuple[SourceSpan, ...]
+    kind: str = "repository_policy"
+    scope_path: str = ""
+    priority: int = 0
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,18 @@ class Rule:
     source_span_id: str
     statement: str
     applies_to: tuple[str, ...]
+    source_path: str = ""
+    scope_path: str = ""
+    priority: int = 0
+
+
+@dataclass(frozen=True)
+class ContractConflict:
+    conflict_id: str
+    source_span_ids: tuple[str, ...]
+    description: str
+    resolution: str
+    resolved: bool
 
 
 @dataclass(frozen=True)
@@ -63,18 +78,25 @@ class AuditRequest:
     repository_path: Path
     base_ref: str
     include_untracked: bool = True
+    contracts_ref: str = "base"
+    check_result_paths: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
 class AuditReport:
     base_revision: str
     head_revision: str
+    snapshot: str
     changes: tuple[ChangedFile, ...]
     contracts: tuple[ContractSource, ...]
     rules: tuple[Rule, ...]
     assessments: tuple[Assessment, ...]
     evidence: tuple[Evidence, ...]
     model: str
+    contracts_ref: str = "base"
+    contract_changes: tuple[ChangedFile, ...] = ()
+    conflicts: tuple[ContractConflict, ...] = ()
+    compiled_rule_count: int | None = None
     issues: tuple[str, ...] = ()
     schema_version: str = "1"
     mode: str = "advisory"

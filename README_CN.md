@@ -18,9 +18,10 @@ AI 代码评审建议。
 
 RepoWitness 综合以下输入：
 
-- 仓库规范文档；
+- 仓库规范文档，包括 `AGENTS.md`、README、贡献/安全策略和 ADR/架构文档；
 - 本次 Git diff；
 - 相关仓库代码；
+- 可选的、与当前 snapshot 绑定的外部检查结果；
 - 只读取证工具返回的证据。
 
 每条适用规则只能得到一种结论：
@@ -47,23 +48,28 @@ RepoWitness Agent 必须显式获得工具。正式审查路径不注册 Bash、
 继承自 CoreCoder 的相关工具源码仍然保留，供未来显式扩展，但不会进入
 RepoWitness 审查 Agent。
 
-## 当前第一阶段能力
+## 当前能力
 
-`0.1.0` 当前已经支持：
+`0.2.0` 当前已经支持：
 
 - `repowitness audit --base <ref>`；
-- 从 base revision 读取根目录 `AGENTS.md`；
+- 默认从 base revision 读取仓库规范，并可显式选择 `head`/`worktree`；
+- 自动发现根及适用目录的 `AGENTS.md`、根 README、`CONTRIBUTING.md`、
+  `SECURITY.md`、ADR 和架构 Markdown；
+- README 仅提取明确的规范性要求，不把产品介绍或教程当成规则；
+- 按嵌套目录作用域、规则 glob 和来源优先级筛选适用规则；
+- 单独报告本次规范文档变更和模型识别出的显式规范冲突；
 - 审查已提交、暂存、未暂存和未跟踪的工作区变更；
 - Contract Compiler Agent 与 Review Agent；
-- 受仓库路径约束的 diff 和文件读取工具；
+- 受仓库路径约束的 diff、文件读取、glob 和 grep 工具；
+- 导入与 snapshot 严格匹配的标准 check-result JSON；
 - canonical JSON 和 Markdown 报告；
+- GitHub composite Action，在 Job Summary 发布 Markdown 报告；
 - advisory 退出语义。
 
 暂未实现：
 
-- GitHub Actions 发布；
-- 多层级 `AGENTS.md`、`CONTRIBUTING.md` 和 ADR 自动发现；
-- JUnit、SARIF 和检查结果导入；
+- JUnit、SARIF 原生解析（当前可转换为标准 check-result JSON）；
 - YAML 配置；
 - Required Check 或 `--fail-on`。
 
@@ -115,6 +121,61 @@ repowitness audit --base main --format markdown --output report.md
 
 默认审查当前工作区，但规则始终来自解析后的 base commit，因此一次修改不能
 先放宽 `AGENTS.md`，再按放宽后的文本审查自己。
+
+仓库刚开始引入规范、base 中还不存在规范文档时，可以显式从当前工作区读取：
+
+```bash
+repowitness audit --base main --contracts-ref worktree
+```
+
+查看当前审查 snapshot：
+
+```bash
+repowitness snapshot
+```
+
+导入已有测试、Lint 或静态检查结果：
+
+```bash
+repowitness audit \
+  --base main \
+  --check-results .repowitness/pytest-result.json
+```
+
+标准结果文件格式：
+
+```json
+{
+  "schema_version": "1",
+  "snapshot": "<repowitness snapshot 的输出>",
+  "checks": [
+    {
+      "name": "pytest",
+      "status": "pass",
+      "summary": "106 tests passed"
+    }
+  ]
+}
+```
+
+## GitHub Actions
+
+调用仓库中的 composite Action；checkout 必须保留 base 历史：
+
+```yaml
+steps:
+  - uses: actions/checkout@v6
+    with:
+      fetch-depth: 0
+  - uses: Loren-ggs/RepoWitness@v0.2.0
+    with:
+      base: ${{ github.event.pull_request.base.sha }}
+    env:
+      REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
+```
+
+报告写入 GitHub Job Summary。当前仍是建议模式，不会因为审查结论为 `FAIL`
+而阻止合并。
 
 当前版本为建议模式。即使报告包含 `FAIL`，只要审查完整执行，退出码仍为
 `0`；仓库、配置、模型或报告生成错误使用非零退出码。

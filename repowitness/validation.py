@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 from .domain import Assessment, Rule
@@ -36,6 +37,26 @@ def validate_assessments(
         ]
         if assessment.verdict in {"PASS", "FAIL", "WARN"} and not assessment.evidence_handles:
             limitations.append(f"{assessment.verdict} requires at least one evidence handle")
+        if assessment.verdict in {"PASS", "FAIL"}:
+            expected_statuses = (
+                {"pass"} if assessment.verdict == "PASS" else {"fail", "error"}
+            )
+            for handle in assessment.evidence_handles:
+                record = evidence.get(handle)
+                if record is None or record.kind != "check_result":
+                    continue
+                try:
+                    status = json.loads(record.content)["status"]
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    limitations.append(
+                        f"invalid check-result evidence: {handle}"
+                    )
+                    continue
+                if status not in expected_statuses:
+                    limitations.append(
+                        f"{assessment.verdict} cannot cite a {status} "
+                        f"check result: {handle}"
+                    )
 
         if limitations:
             assessment = replace(

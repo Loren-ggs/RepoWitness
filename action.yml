@@ -1,0 +1,52 @@
+name: RepoWitness advisory audit
+description: Evidence-backed review against your repository's own rules.
+inputs:
+  base:
+    description: Base Git ref or commit SHA used for the diff.
+    required: true
+  contracts-ref:
+    description: Contract revision: base, head, or worktree.
+    required: false
+    default: base
+  output:
+    description: Markdown report path inside the checked-out repository.
+    required: false
+    default: repowitness-report.md
+  python-version:
+    description: Python version used to run RepoWitness.
+    required: false
+    default: "3.13"
+outputs:
+  report:
+    description: Absolute path to the generated Markdown report.
+    value: ${{ steps.audit.outputs.report }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+
+    - name: Install RepoWitness
+      shell: bash
+      run: python -m pip install "${{ github.action_path }}"
+
+    - name: Run advisory contract audit
+      id: audit
+      shell: bash
+      env:
+        REPOWITNESS_ACTION_BASE: ${{ inputs.base }}
+        REPOWITNESS_ACTION_CONTRACTS_REF: ${{ inputs.contracts-ref }}
+        REPOWITNESS_ACTION_OUTPUT: ${{ inputs.output }}
+      run: |
+        report_path="${GITHUB_WORKSPACE}/${REPOWITNESS_ACTION_OUTPUT}"
+        repowitness audit \
+          --repository "${GITHUB_WORKSPACE}" \
+          --base "${REPOWITNESS_ACTION_BASE}" \
+          --contracts-ref "${REPOWITNESS_ACTION_CONTRACTS_REF}" \
+          --format markdown \
+          --output "${report_path}"
+        cat "${report_path}" >> "${GITHUB_STEP_SUMMARY}"
+        echo "report=${report_path}" >> "${GITHUB_OUTPUT}"

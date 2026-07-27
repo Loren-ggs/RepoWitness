@@ -44,6 +44,7 @@ def _report():
     return AuditReport(
         base_revision="base-sha",
         head_revision="head-sha",
+        snapshot="head-sha",
         changes=(ChangedFile(path="app.py", status="modified"),),
         contracts=(
             ContractSource(
@@ -66,6 +67,8 @@ def test_json_is_canonical_and_markdown_is_rendered_from_the_same_report():
     markdown = render_markdown(report)
 
     assert payload["summary"]["overall"] == "FAIL"
+    assert payload["run"]["contracts_ref"] == "base"
+    assert payload["contracts"][0]["kind"] == "repository_policy"
     assert payload["assessments"][0]["rule"]["quote"] == ("Public APIs must stay compatible.")
     assert payload["assessments"][0]["rule"]["source"] == {
         "path": "AGENTS.md",
@@ -74,6 +77,7 @@ def test_json_is_canonical_and_markdown_is_rendered_from_the_same_report():
         "end_line": 3,
     }
     assert "# RepoWitness 审查报告" in markdown
+    assert "## 规范来源" in markdown
     assert "FAIL" in markdown
     assert "AGENTS.md:3" in markdown
     assert "Restore a compatibility wrapper." in markdown

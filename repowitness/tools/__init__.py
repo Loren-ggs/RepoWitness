@@ -37,17 +37,25 @@ def build_review_tools(
     repository,
     evidence,
     collector,
+    rules,
     *,
     include_untracked=True,
 ):
     from .changed_files import ChangedFilesTool
+    from .check_results import CheckResultsTool
     from .diff import DiffTool
     from .read import ReadRepositoryFileTool
+    from .repository_search import GlobRepositoryTool, GrepRepositoryTool
+    from .rules import RulesTool
     from .submit_assessments import SubmitAssessmentsTool
 
     return [
         ChangedFilesTool(repository, include_untracked=include_untracked),
+        RulesTool(rules),
+        CheckResultsTool(evidence),
         DiffTool(repository, evidence),
         ReadRepositoryFileTool(repository, evidence),
+        GlobRepositoryTool(repository, evidence),
+        GrepRepositoryTool(repository, evidence),
         SubmitAssessmentsTool(collector),
     ]
