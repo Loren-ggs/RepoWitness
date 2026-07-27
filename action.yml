@@ -5,7 +5,7 @@ inputs:
     description: Base Git ref or commit SHA used for the diff.
     required: true
   contracts-ref:
-    description: Contract revision: base, head, or worktree.
+    description: "Contract revision: base, head, or worktree."
     required: false
     default: base
   output:
