@@ -26,14 +26,16 @@ class Agent:
         tools: list[Tool] | None = None,
         max_context_tokens: int = 128_000,
         max_rounds: int = 50,
+        *,
+        system: str | None = None,
     ):
         self.llm = llm
-        self.tools = tools if tools is not None else ALL_TOOLS
+        self.tools = list(tools) if tools is not None else list(ALL_TOOLS)
         self._tool_by_name = {t.name: t for t in self.tools}
         self.messages: list[dict] = []
         self.context = ContextManager(max_tokens=max_context_tokens)
         self.max_rounds = max_rounds
-        self._system = system_prompt(self.tools)
+        self._system = system if system is not None else system_prompt(self.tools)
 
         # wire up sub-agent capability
         for t in self.tools:

@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Loren-ggs/RepoWitness/schemas/report-v1.schema.json",
+  "title": "RepoWitness Audit Report v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run",
+    "summary",
+    "changes",
+    "contracts",
+    "assessments",
+    "issues"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "base_revision",
+        "head_revision",
+        "model",
+        "mode"
+      ],
+      "properties": {
+        "base_revision": {
+          "type": "string"
+        },
+        "head_revision": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "mode": {
+          "const": "advisory"
+        }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "overall",
+        "counts",
+        "rules_discovered",
+        "rules_evaluated"
+      ],
+      "properties": {
+        "overall": {
+          "$ref": "#/$defs/verdict"
+        },
+        "counts": {
+          "type": "object",
+          "required": [
+            "PASS",
+            "FAIL",
+            "WARN",
+            "UNVERIFIED"
+          ],
+          "properties": {
+            "PASS": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "FAIL": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "WARN": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "UNVERIFIED": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "rules_discovered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rules_evaluated": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "status",
+          "old_path",
+          "binary"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "added",
+              "modified",
+              "deleted",
+              "renamed"
+            ]
+          },
+          "old_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "binary": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "revision",
+          "spans"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "revision": {
+            "const": "base"
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sourceSpan"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "assessments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule",
+          "verdict",
+          "evidence_handles",
+          "evidence",
+          "rationale",
+          "next_step",
+          "limitations"
+        ],
+        "properties": {
+          "rule": {
+            "type": "object"
+          },
+          "verdict": {
+            "$ref": "#/$defs/verdict"
+          },
+          "evidence_handles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "next_step": {
+            "type": "string",
+            "minLength": 1
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "verdict": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "WARN",
+        "UNVERIFIED"
+      ]
+    },
+    "sourceSpan": {
+      "type": "object",
+      "required": [
+        "span_id",
+        "start_line",
+        "end_line",
+        "text"
+      ],
+      "properties": {
+        "span_id": {
+          "type": "string"
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

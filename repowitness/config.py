@@ -41,17 +41,42 @@ class Config:
         _load_dotenv()
         # pick up common env vars automatically
         api_key = (
-            os.getenv("CORECODER_API_KEY")
+            os.getenv("REPOWITNESS_API_KEY")
+            or os.getenv("CORECODER_API_KEY")
             or os.getenv("OPENAI_API_KEY")
             or os.getenv("DEEPSEEK_API_KEY")
             or ""
         )
         return cls(
-            model=os.getenv("CORECODER_MODEL", "gpt-5.5"),
+            model=(
+                os.getenv("REPOWITNESS_MODEL")
+                or os.getenv("CORECODER_MODEL")
+                or "gpt-5.5"
+            ),
             api_key=api_key,
-            base_url=os.getenv("OPENAI_BASE_URL") or os.getenv("CORECODER_BASE_URL"),
-            max_tokens=int(os.getenv("CORECODER_MAX_TOKENS", "4096")),
-            temperature=float(os.getenv("CORECODER_TEMPERATURE", "0")),
-            max_context_tokens=int(os.getenv("CORECODER_MAX_CONTEXT", "128000")),
-            provider=os.getenv("CORECODER_PROVIDER", "openai"),
+            base_url=(
+                os.getenv("REPOWITNESS_BASE_URL")
+                or os.getenv("OPENAI_BASE_URL")
+                or os.getenv("CORECODER_BASE_URL")
+            ),
+            max_tokens=int(
+                os.getenv("REPOWITNESS_MAX_TOKENS")
+                or os.getenv("CORECODER_MAX_TOKENS")
+                or "4096"
+            ),
+            temperature=float(
+                os.getenv("REPOWITNESS_TEMPERATURE")
+                or os.getenv("CORECODER_TEMPERATURE")
+                or "0"
+            ),
+            max_context_tokens=int(
+                os.getenv("REPOWITNESS_MAX_CONTEXT")
+                or os.getenv("CORECODER_MAX_CONTEXT")
+                or "128000"
+            ),
+            provider=(
+                os.getenv("REPOWITNESS_PROVIDER")
+                or os.getenv("CORECODER_PROVIDER")
+                or "openai"
+            ),
         )
