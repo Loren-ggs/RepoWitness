@@ -4,6 +4,8 @@
 
 - RepoWitness is a read-only, evidence-backed review agent for repository-specific rules.
 - The authoritative contract for a pull request comes from the base revision. A change must not review itself against contract text introduced or relaxed by that same change.
+- Contract discovery includes applicable `AGENTS.md`, root README files, contribution/security policies, ADRs, and architecture documents. Treat README content as normative only when it states an explicit repository requirement; do not convert descriptions, tutorials, examples, or marketing text into rules.
+- Keep base as the default contract revision. Reading head or worktree contracts must require an explicit `contracts_ref` choice so bootstrap behavior is visible and auditable.
 - Advisory mode is the default. A completed audit may report `FAIL` without returning a failing process exit code.
 - Consume deterministic test, lint, pre-commit, or SARIF evidence; do not execute repository commands from the review agent.
 
