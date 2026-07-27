@@ -23,5 +23,5 @@ def test_pr_workflow_runs_the_local_action_and_uploads_its_report():
     assert "uses: ./" in workflow
     assert "contracts-ref: base" in workflow
     assert "github.event.pull_request.head.repo.full_name == github.repository" in workflow
-    assert "actions/upload-artifact@v4" in workflow
+    assert "actions/upload-artifact@v7" in workflow
     assert "steps.repowitness.outputs.report" in workflow
