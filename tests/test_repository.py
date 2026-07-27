@@ -37,6 +37,16 @@ def test_repository_view_keeps_base_contracts_separate_from_worktree(tmp_path):
     assert view.read_text("AGENTS.md", revision="worktree") == ("Ignore compatibility for this change.\n")
 
 
+def test_repository_view_normalizes_crlf_worktree_text(tmp_path):
+    repo = _committed_repository(tmp_path)
+    (repo / "AGENTS.md").write_bytes(b"First rule.\r\nSecond rule.\r\n")
+    view = RepositoryView.open(repo, base_ref="HEAD")
+
+    assert view.read_text("AGENTS.md", revision="worktree") == (
+        "First rule.\nSecond rule.\n"
+    )
+
+
 @pytest.mark.parametrize("file_path", ["/etc/passwd", "../outside.txt", "a/../../b"])
 def test_repository_view_rejects_paths_outside_the_repository(tmp_path, file_path):
     repo = _committed_repository(tmp_path)
@@ -85,6 +95,29 @@ def test_snapshot_identity_uses_head_when_clean_and_fingerprint_when_dirty(tmp_p
 
     assert dirty.startswith("worktree:")
     assert dirty != view.head_revision
+
+
+def test_snapshot_identity_honors_global_autocrlf_for_a_clean_crlf_worktree(
+    tmp_path,
+    monkeypatch,
+):
+    global_config = tmp_path / "global.gitconfig"
+    global_config.write_text("[core]\n\tautocrlf = true\n", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+    repo = tmp_path / "repository"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "repowitness@example.test")
+    _git(repo, "config", "user.name", "RepoWitness Tests")
+    (repo / "app.py").write_bytes(b"VALUE = 1\r\n")
+    _git(repo, "add", "app.py")
+    _git(repo, "commit", "-qm", "baseline")
+
+    view = RepositoryView.open(repo, base_ref="HEAD")
+
+    assert view.snapshot_identity() == view.head_revision
 
 
 def test_worktree_file_listing_excludes_deleted_index_entries(tmp_path):

@@ -78,7 +78,7 @@ def test_contract_catalog_discovers_readmes_policies_architecture_and_scoped_age
     for relative, text in files.items():
         path = tmp_path / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
+        path.write_text(text, encoding="utf-8", newline="\n")
     _git(tmp_path, "add", ".")
     _git(tmp_path, "commit", "-qm", "repository contracts")
 

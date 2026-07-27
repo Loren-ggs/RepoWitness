@@ -21,8 +21,6 @@ class UnsafeRepositoryPath(ValueError):
 
 
 _GIT_ENV = {
-    "GIT_CONFIG_NOSYSTEM": "1",
-    "GIT_CONFIG_GLOBAL": os.devnull,
     "GIT_OPTIONAL_LOCKS": "0",
     "LC_ALL": "C",
 }
@@ -69,9 +67,10 @@ class RepositoryView:
         if len(data) > max_bytes:
             raise RepositoryError(f"{file_path} exceeds the {max_bytes}-byte read limit")
         try:
-            return data.decode("utf-8")
+            text = data.decode("utf-8")
         except UnicodeDecodeError as exc:
             raise RepositoryError(f"{file_path} is not UTF-8 text") from exc
+        return text.replace("\r\n", "\n").replace("\r", "\n")
 
     def changed_files(self, *, include_untracked: bool = True) -> list[ChangedFile]:
         raw = self._run_git_bytes(
