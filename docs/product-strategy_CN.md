@@ -258,6 +258,10 @@ repowitness audit --base main
 9. 提供 `repowitness snapshot` 生成外部证据绑定值；
 10. 提供 composite GitHub Action，并把 Markdown 写入 Job Summary。
 
+`applies_to` 是可选的仓库相对 glob，只有规范原文明确限定路径时才应提交。
+如果模型提交的模式匹配不到仓库中的任何已知路径，系统必须回退到确定性的
+规范来源作用域，并在报告中展示规则原文、回退状态和原因，不能静默移除规则。
+
 第二阶段仍不实现 YAML 配置、原生 JUnit/SARIF 解析、自动 PR 评论、
 Required Check 或 `--fail-on`。这些能力在现有来源发现、证据质量和误报率
 稳定后继续推进。

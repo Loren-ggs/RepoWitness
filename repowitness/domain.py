@@ -53,6 +53,16 @@ class ContractConflict:
 
 
 @dataclass(frozen=True)
+class RuleSelectionDecision:
+    rule_id: str
+    status: str
+    reason: str
+    statement: str
+    source_path: str
+    applies_to: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Evidence:
     handle: str
     kind: str
@@ -97,6 +107,7 @@ class AuditReport:
     contract_changes: tuple[ChangedFile, ...] = ()
     conflicts: tuple[ContractConflict, ...] = ()
     compiled_rule_count: int | None = None
+    rule_selection: tuple[RuleSelectionDecision, ...] = ()
     issues: tuple[str, ...] = ()
     schema_version: str = "1"
     mode: str = "advisory"

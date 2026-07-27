@@ -22,29 +22,34 @@ class SubmitRulesTool(Tool):
                         "applies_to": {
                             "type": "array",
                             "items": {"type": "string"},
+                            "description": (
+                                "Optional repository-relative glob patterns "
+                                "explicitly supported by the cited contract. "
+                                "Omit when the rule applies to the whole "
+                                "contract source scope."
+                            ),
                         },
                     },
                     "required": [
                         "source_span_id",
                         "statement",
-                        "applies_to",
                     ],
                 },
-            }
-        },
-        "conflicts": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "source_span_ids": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "minItems": 2,
+            },
+            "conflicts": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "source_span_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 2,
+                        },
+                        "description": {"type": "string"},
                     },
-                    "description": {"type": "string"},
+                    "required": ["source_span_ids", "description"],
                 },
-                "required": ["source_span_ids", "description"],
             },
         },
         "required": ["rules"],

@@ -18,11 +18,12 @@ def _git(repo, *args):
 
 
 class _ScriptedReviewLLM:
-    def __init__(self):
+    def __init__(self, applies_to=("**/*.py",)):
         self.calls = {"contract": 0, "review": 0}
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.model = "scripted-review-model"
+        self.applies_to = applies_to
 
     @property
     def estimated_cost(self):
@@ -50,7 +51,7 @@ class _ScriptedReviewLLM:
                                     {
                                         "source_span_id": span_id,
                                         "statement": ("Public APIs must stay compatible."),
-                                        "applies_to": ["**/*.py"],
+                                        "applies_to": list(self.applies_to),
                                     }
                                 ]
                             },
@@ -119,3 +120,37 @@ def test_audit_engine_runs_contract_and_review_agents_end_to_end(tmp_path):
     assert report.rules[0].statement == "Public APIs must stay compatible."
     assert report.assessments[0].verdict == "FAIL"
     assert report.evidence[0].path == "app.py"
+
+
+def test_audit_does_not_silently_drop_rules_with_unusable_model_scopes(
+    tmp_path,
+):
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "repowitness@example.test")
+    _git(tmp_path, "config", "user.name", "RepoWitness Tests")
+    (tmp_path / "AGENTS.md").write_text(
+        "Public APIs must stay compatible.\n"
+    )
+    (tmp_path / "app.py").write_text(
+        "def public_api():\n    return 1\n"
+    )
+    _git(tmp_path, "add", "AGENTS.md", "app.py")
+    _git(tmp_path, "commit", "-qm", "baseline")
+    (tmp_path / "app.py").write_text(
+        "def renamed_api():\n    return 1\n"
+    )
+
+    report = AuditEngine(
+        _ScriptedReviewLLM(applies_to=("repo", "agents"))
+    ).audit(
+        AuditRequest(repository_path=tmp_path, base_ref="HEAD")
+    )
+
+    assert report.overall == "FAIL"
+    assert len(report.rules) == 1
+    assert report.rules[0].applies_to == ()
+    assert report.assessments[0].verdict == "FAIL"
+    assert any(
+        "treated as scope-wide" in issue for issue in report.issues
+    )
+    assert report.rule_selection[0].status == "applicable_fallback"

@@ -55,6 +55,10 @@ Required workflow:
    A nested AGENTS.md applies only inside its returned scope_path. Higher
    priority sources take precedence only when requirements are explicitly
    incompatible; do not silently discard either source.
+   Set applies_to only when the cited contract explicitly limits the rule to
+   identifiable repository-relative paths or glob patterns such as **/*.py.
+   Omit applies_to for repository-wide rules. Never use semantic labels such
+   as repo, code, agents, backend, or frontend as path patterns.
 3. Identify only explicit, materially incompatible requirements as conflicts.
    Cite at least two exact source spans for each conflict. Do not infer a
    conflict merely because documents use different wording.

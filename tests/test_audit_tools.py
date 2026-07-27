@@ -123,6 +123,39 @@ def test_contract_conflicts_require_real_spans_and_use_source_priority(tmp_path)
     assert collector.conflicts == ()
 
 
+def test_submit_rules_schema_exposes_conflicts_as_an_object_property(tmp_path):
+    catalog = _catalog(tmp_path)
+    tool = SubmitRulesTool(RuleCollector(catalog))
+
+    assert "conflicts" in tool.parameters["properties"]
+
+
+def test_submit_rules_schema_defaults_unspecified_paths_to_source_scope(tmp_path):
+    catalog = _catalog(tmp_path)
+    collector = RuleCollector(catalog)
+    tool = SubmitRulesTool(collector)
+    rule_schema = tool.parameters["properties"]["rules"]["items"]
+
+    assert "applies_to" not in rule_schema["required"]
+    assert "repository-relative glob" in (
+        rule_schema["properties"]["applies_to"]["description"]
+    )
+
+    result = json.loads(
+        tool.execute(
+            rules=[
+                {
+                    "source_span_id": catalog.spans[0].span_id,
+                    "statement": "Public APIs must stay compatible.",
+                }
+            ]
+        )
+    )
+
+    assert result["accepted"] == 1
+    assert collector.rules[0].applies_to == ()
+
+
 def test_review_read_tools_issue_verifiable_evidence_handles(tmp_path):
     _catalog(tmp_path)
     (tmp_path / "app.py").write_text("def public_api():\n    return 1\n")

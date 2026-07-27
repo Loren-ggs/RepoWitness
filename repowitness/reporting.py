@@ -106,6 +106,17 @@ def report_to_dict(report: AuditReport) -> dict:
             }
             for conflict in report.conflicts
         ],
+        "rule_selection": [
+            {
+                "rule_id": decision.rule_id,
+                "status": decision.status,
+                "reason": decision.reason,
+                "statement": decision.statement,
+                "source_path": decision.source_path,
+                "applies_to": list(decision.applies_to),
+            }
+            for decision in report.rule_selection
+        ],
         "assessments": assessments,
         "issues": list(report.issues),
     }
@@ -129,6 +140,11 @@ def render_markdown(report: AuditReport) -> str:
         f"**总体结论：{summary['overall']}**",
         "",
         (f"PASS {counts['PASS']} · FAIL {counts['FAIL']} · WARN {counts['WARN']} · UNVERIFIED {counts['UNVERIFIED']}"),
+        (
+            f"规则：编译 {summary['rules_discovered']} · "
+            f"适用 {summary['rules_applicable']} · "
+            f"已评估 {summary['rules_evaluated']}"
+        ),
         "",
         f"- Base：`{payload['run']['base_revision']}`",
         f"- Head：`{payload['run']['head_revision']}`",
@@ -151,9 +167,16 @@ def render_markdown(report: AuditReport) -> str:
 
     if payload["contract_changes"]:
         lines.extend(["", "## 本次规范文档变更", ""])
-        lines.append(
-            "以下变更会单独提示；默认仍以 base 版本规范审查本次代码变更。"
-        )
+        if payload["run"]["contracts_ref"] == "base":
+            lines.append(
+                "以下变更会单独提示；本次仍以 base 版本规范审查代码变更。"
+            )
+        else:
+            lines.append(
+                "本次审查显式使用 "
+                f"`{payload['run']['contracts_ref']}` 版本规范；"
+                "其中可能包含本次变更新增或修改的规则。"
+            )
         lines.extend(
             f"- `{change['path']}`（{change['status']}）"
             for change in payload["contract_changes"]
@@ -170,6 +193,20 @@ def render_markdown(report: AuditReport) -> str:
                     f"  - 处理：{conflict['resolution']}",
                 ]
             )
+
+    noteworthy_selection = [
+        decision
+        for decision in payload["rule_selection"]
+        if decision["status"] != "applicable"
+    ]
+    if noteworthy_selection:
+        lines.extend(["", "## 规则适用性", ""])
+        lines.extend(
+            f"- `{decision['rule_id']}` · `{decision['status']}` · "
+            f"{decision['statement']}（`{decision['source_path']}`）"
+            f"\n  - {decision['reason']}"
+            for decision in noteworthy_selection
+        )
 
     if payload["issues"]:
         lines.extend(["", "## 审查限制", ""])

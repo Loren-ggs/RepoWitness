@@ -10,7 +10,7 @@ from .domain import AuditReport, AuditRequest
 from .evidence import EvidenceStore
 from .prompt import contract_compiler_prompt, review_prompt
 from .repository import RepositoryView
-from .rules import select_applicable_rules
+from .rules import select_rules
 from .tools import build_contract_tools, build_review_tools
 from .validation import validate_assessments
 
@@ -53,7 +53,26 @@ class AuditEngine:
                     f"Unresolved contract conflict {conflict.conflict_id}: "
                     f"{conflict.description}"
                 )
-        rules = select_applicable_rules(compiled_rules, changes)
+        known_paths = tuple(
+            sorted(
+                set(repository.list_files(revision="base"))
+                | set(repository.list_files(revision="head"))
+                | set(repository.list_files(revision="worktree"))
+                | {
+                    path
+                    for change in changes
+                    for path in (change.path, change.old_path)
+                    if path
+                }
+            )
+        )
+        selection = select_rules(
+            compiled_rules,
+            changes,
+            known_paths=known_paths,
+        )
+        rules = selection.applicable_rules
+        issues.extend(selection.notices)
         evidence = EvidenceStore()
         issues.extend(
             import_check_results(
@@ -112,5 +131,6 @@ class AuditEngine:
             ),
             conflicts=rule_collector.conflicts,
             compiled_rule_count=len(compiled_rules),
+            rule_selection=selection.decisions,
             issues=tuple(issues),
         )

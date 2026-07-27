@@ -11,6 +11,7 @@
     "contracts",
     "contract_changes",
     "conflicts",
+    "rule_selection",
     "assessments",
     "issues"
   ],
@@ -248,6 +249,48 @@
           },
           "resolved": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "rule_selection": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule_id",
+          "status",
+          "reason",
+          "statement",
+          "source_path",
+          "applies_to"
+        ],
+        "properties": {
+          "rule_id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "applicable",
+              "applicable_fallback",
+              "not_applicable"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "applies_to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false

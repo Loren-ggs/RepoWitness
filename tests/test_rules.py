@@ -1,5 +1,5 @@
 from repowitness.domain import ChangedFile, Rule
-from repowitness.rules import select_applicable_rules
+from repowitness.rules import select_applicable_rules, select_rules
 
 
 def _rule(rule_id, applies_to=(), scope_path=""):
@@ -36,3 +36,21 @@ def test_select_applicable_rules_considers_old_rename_path():
     )
 
     assert select_applicable_rules(rules, changes) == rules
+
+
+def test_rule_selection_explains_a_valid_pattern_excluded_from_the_diff():
+    rule = _rule("docs-only", ("docs/**/*.md",))
+
+    selection = select_rules(
+        (rule,),
+        (ChangedFile(path="src/app.py", status="modified"),),
+        known_paths=("docs/guide/setup.md", "src/app.py"),
+    )
+
+    assert selection.applicable_rules == ()
+    assert selection.decisions[0].rule_id == "docs-only"
+    assert selection.decisions[0].status == "not_applicable"
+    assert selection.decisions[0].reason == (
+        "Declared applies_to patterns match repository files but not the "
+        "current changes."
+    )
