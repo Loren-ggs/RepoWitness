@@ -231,6 +231,21 @@ jobs:
       api_key: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
 
+The Secret alone is sufficient for the default OpenAI configuration. An API
+key cannot identify or route to another OpenAI-compatible service by itself.
+For DeepSeek or another compatible endpoint, also create these non-sensitive
+repository Variables under `Settings → Secrets and variables → Actions`:
+
+```text
+REPOWITNESS_MODEL = deepseek-v4-flash
+REPOWITNESS_BASE_URL = https://api.deepseek.com
+```
+
+Use the model and base URL supplied by your provider. The reusable workflow
+automatically exposes the caller repository's Variables as
+`REPOWITNESS_MODEL` and `REPOWITNESS_BASE_URL`. Undefined Variables remain
+empty and RepoWitness falls back to its default OpenAI configuration.
+
 The workflow checks out full history, selects the PR base SHA, runs the audit,
 writes the Job Summary, creates or updates the PR comment, and uploads the
 `repowitness-report` artifact. Calls triggered by a manual caller use the
@@ -245,6 +260,9 @@ steps:
     with:
       fetch-depth: 0
   - uses: Loren-ggs/RepoWitness@v0.3.0
+    env:
+      REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
+      REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
     with:
       api-key: ${{ secrets.REPOWITNESS_API_KEY }}
       check-results: ${{ runner.temp }}/repowitness-check-results.json

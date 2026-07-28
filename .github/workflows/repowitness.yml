@@ -48,6 +48,9 @@ jobs:
       - name: Run RepoWitness
         id: repowitness
         uses: Loren-ggs/RepoWitness@v0.3.0
+        env:
+          REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
+          REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
         with:
           api-key: ${{ secrets.api_key }}
           base: ${{ inputs.base }}

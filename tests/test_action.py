@@ -226,6 +226,8 @@ def test_repowitness_workflow_wraps_checkout_audit_comment_and_artifact():
     assert "fetch-depth: 0" in workflow
     assert "uses: Loren-ggs/RepoWitness@v0.3.0" in workflow
     assert "api-key: ${{ secrets.api_key }}" in workflow
+    assert "REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}" in workflow
+    assert "REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}" in workflow
     assert "comment: ${{ inputs.comment }}" in workflow
     assert "actions/upload-artifact@v7" in workflow
     assert "steps.repowitness.outputs.report" in workflow
