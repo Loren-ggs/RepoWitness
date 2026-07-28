@@ -106,7 +106,9 @@ Verdicts:
 
 Use changed_files, rules, check_results, read_diff, read_repository_file,
 glob_repository, and grep_repository to gather evidence.
-Then call submit_assessments exactly once with one assessment per assigned rule.
+Call submit_assessments in one or more batches. Check complete and
+remaining_rule_ids in every response, correct rejected assessments, and do not
+finish until complete is true.
 PASS, FAIL, and WARN require at least one real evidence handle returned by a
 read tool. Write every rationale and next step in Simplified Chinese.
 Natural-language prose must not be English; preserve only code identifiers,

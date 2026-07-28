@@ -5,6 +5,7 @@ import pytest
 
 from repowitness.collectors import AssessmentCollector, RuleCollector
 from repowitness.contracts import ContractCatalog, ContractSourceDiscovery
+from repowitness.domain import Assessment
 from repowitness.evidence import EvidenceStore
 from repowitness.repository import RepositoryView
 from repowitness.tools.changed_files import ChangedFilesTool
@@ -144,7 +145,7 @@ def test_audit_tool_sets_never_register_mutating_or_subagent_tools(tmp_path):
     repository = RepositoryView.open(tmp_path, base_ref="HEAD")
     rules = RuleCollector(catalog)
     evidence = EvidenceStore()
-    assessments = AssessmentCollector(())
+    assessments = AssessmentCollector((), evidence)
 
     contract_names = {
         tool.name for tool in build_contract_tools(catalog, rules)
@@ -286,7 +287,9 @@ def test_repository_search_tools_are_snapshot_bounded_and_issue_evidence(tmp_pat
     assert evidence.get(matches["evidence_handle"]).kind == "repository_grep"
 
 
-def test_invalid_assessment_evidence_is_downgraded_to_unverified(tmp_path):
+def test_submit_assessments_rejects_unknown_evidence_and_reports_remaining(
+    tmp_path,
+):
     catalog = _catalog(tmp_path)
     rules = RuleCollector(catalog)
     span_id = catalog.spans[0].span_id
@@ -299,9 +302,11 @@ def test_invalid_assessment_evidence_is_downgraded_to_unverified(tmp_path):
             }
         ]
     )
-    assessments = AssessmentCollector(rules.rules)
+    evidence = EvidenceStore()
+    assessments = AssessmentCollector(rules.rules, evidence)
+    tool = SubmitAssessmentsTool(assessments)
     submitted = json.loads(
-        SubmitAssessmentsTool(assessments).execute(
+        tool.execute(
             assessments=[
                 {
                     "rule_id": rules.rules[0].rule_id,
@@ -314,15 +319,133 @@ def test_invalid_assessment_evidence_is_downgraded_to_unverified(tmp_path):
         )
     )
 
+    assert submitted == {
+        "accepted": 0,
+        "rule_ids": [],
+        "rejected": [
+            {
+                "index": 0,
+                "reason": "unknown evidence handle: evidence-invented",
+            }
+        ],
+        "assigned": 1,
+        "submitted": 0,
+        "complete": False,
+        "remaining_rule_ids": [rules.rules[0].rule_id],
+    }
+    assert assessments.assessments == ()
+
+    record = evidence.add(
+        kind="repository_read",
+        revision="head",
+        path="app.py",
+        content="def renamed_api():\n    return 1\n",
+    )
+    retried = json.loads(
+        tool.execute(
+            assessments=[
+                {
+                    "rule_id": rules.rules[0].rule_id,
+                    "verdict": "FAIL",
+                    "evidence_handles": [record.handle],
+                    "rationale": "公共 API 已被重命名。",
+                    "next_step": "恢复兼容入口。",
+                }
+            ]
+        )
+    )
+
+    assert retried["complete"] is True
+    assert retried["remaining_rule_ids"] == []
+
+
+def test_final_validation_still_rejects_unknown_evidence_handles(tmp_path):
+    catalog = _catalog(tmp_path)
+    rules = RuleCollector(catalog)
+    rules.submit(
+        [
+            {
+                "source_span_id": catalog.spans[0].span_id,
+                "statement": "Public APIs must stay compatible.",
+            }
+        ]
+    )
+
     validated = validate_assessments(
         rules.rules,
         EvidenceStore(),
-        assessments.assessments,
+        (
+            Assessment(
+                rule_id=rules.rules[0].rule_id,
+                verdict="FAIL",
+                evidence_handles=("evidence-invented",),
+                rationale="The public API was renamed.",
+                next_step="Restore a compatibility wrapper.",
+            ),
+        ),
     )
 
-    assert submitted["accepted"] == 1
     assert validated[0].verdict == "UNVERIFIED"
-    assert validated[0].limitations == ("unknown evidence handle: evidence-invented",)
+    assert validated[0].limitations == (
+        "unknown evidence handle: evidence-invented",
+    )
+
+
+def test_submit_assessments_accepts_batches_until_all_rules_are_covered(
+    tmp_path,
+):
+    catalog = _catalog(tmp_path)
+    rules = RuleCollector(catalog)
+    span_id = catalog.spans[0].span_id
+    rules.submit(
+        [
+            {
+                "source_span_id": span_id,
+                "statement": "Public APIs must stay compatible.",
+            },
+            {
+                "source_span_id": span_id,
+                "statement": "Compatibility tests must pass.",
+            },
+        ]
+    )
+    tool = SubmitAssessmentsTool(
+        AssessmentCollector(rules.rules, EvidenceStore())
+    )
+
+    first = json.loads(
+        tool.execute(
+            assessments=[
+                {
+                    "rule_id": rules.rules[0].rule_id,
+                    "verdict": "UNVERIFIED",
+                    "evidence_handles": [],
+                    "rationale": "没有足够证据。",
+                    "next_step": "人工检查。",
+                }
+            ]
+        )
+    )
+    second = json.loads(
+        tool.execute(
+            assessments=[
+                {
+                    "rule_id": rules.rules[1].rule_id,
+                    "verdict": "UNVERIFIED",
+                    "evidence_handles": [],
+                    "rationale": "没有足够证据。",
+                    "next_step": "人工检查。",
+                }
+            ]
+        )
+    )
+
+    assert first["complete"] is False
+    assert first["submitted"] == 1
+    assert first["remaining_rule_ids"] == [rules.rules[1].rule_id]
+    assert second["complete"] is True
+    assert second["submitted"] == 2
+    assert second["remaining_rule_ids"] == []
 
 
 def test_pass_cannot_cite_a_failing_deterministic_check(tmp_path):
@@ -350,7 +473,7 @@ def test_pass_cannot_cite_a_failing_deterministic_check(tmp_path):
             }
         ),
     )
-    assessments = AssessmentCollector(rules.rules)
+    assessments = AssessmentCollector(rules.rules, evidence)
     assessments.submit(
         [
             {

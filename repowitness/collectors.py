@@ -7,6 +7,7 @@ import threading
 
 from .contracts import ContractCatalog, ContractSourceDiscovery
 from .domain import Assessment, ContractConflict, Rule
+from .evidence import EvidenceStore
 
 
 class RuleCollector:
@@ -147,8 +148,10 @@ class RuleCollector:
 class AssessmentCollector:
     _VERDICTS = {"PASS", "FAIL", "WARN", "UNVERIFIED"}
 
-    def __init__(self, rules: tuple[Rule, ...]):
-        self._rule_ids = {rule.rule_id for rule in rules}
+    def __init__(self, rules: tuple[Rule, ...], evidence: EvidenceStore):
+        self._rule_ids = tuple(rule.rule_id for rule in rules)
+        self._known_rule_ids = set(self._rule_ids)
+        self._evidence = evidence
         self._assessments: dict[str, Assessment] = {}
         self._lock = threading.Lock()
 
@@ -157,13 +160,22 @@ class AssessmentCollector:
         with self._lock:
             return tuple(self._assessments.values())
 
+    @property
+    def remaining_rule_ids(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(
+                rule_id
+                for rule_id in self._rule_ids
+                if rule_id not in self._assessments
+            )
+
     def submit(self, candidates: list[dict]) -> dict:
         accepted = []
         rejected = []
         with self._lock:
             for index, candidate in enumerate(candidates):
                 rule_id = str(candidate.get("rule_id", ""))
-                if rule_id not in self._rule_ids:
+                if rule_id not in self._known_rule_ids:
                     rejected.append(
                         {
                             "index": index,
@@ -190,17 +202,47 @@ class AssessmentCollector:
                         }
                     )
                     continue
+                evidence_handles = tuple(
+                    str(handle)
+                    for handle in candidate.get("evidence_handles", [])
+                )
+                unknown_handles = [
+                    handle
+                    for handle in evidence_handles
+                    if self._evidence.get(handle) is None
+                ]
+                if unknown_handles:
+                    rejected.append(
+                        {
+                            "index": index,
+                            "reason": (
+                                "unknown evidence handle: "
+                                + ", ".join(unknown_handles)
+                            ),
+                        }
+                    )
+                    continue
                 assessment = Assessment(
                     rule_id=rule_id,
                     verdict=verdict,
-                    evidence_handles=tuple(str(handle) for handle in candidate.get("evidence_handles", [])),
+                    evidence_handles=evidence_handles,
                     rationale=rationale,
                     next_step=next_step,
                 )
                 self._assessments[rule_id] = assessment
                 accepted.append(rule_id)
+            remaining_rule_ids = [
+                rule_id
+                for rule_id in self._rule_ids
+                if rule_id not in self._assessments
+            ]
+            submitted_count = len(self._assessments)
         return {
             "accepted": len(accepted),
             "rule_ids": accepted,
             "rejected": rejected,
+            "assigned": len(self._rule_ids),
+            "submitted": submitted_count,
+            "complete": not remaining_rule_ids,
+            "remaining_rule_ids": remaining_rule_ids,
         }

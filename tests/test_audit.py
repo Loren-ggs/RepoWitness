@@ -19,12 +19,17 @@ def _git(repo, *args):
 
 
 class _ScriptedReviewLLM:
-    def __init__(self, applies_to=("**/*.py",)):
+    def __init__(
+        self,
+        applies_to=("**/*.py",),
+        statements=("Public APIs must stay compatible.",),
+    ):
         self.calls = {"contract": 0, "review": 0}
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.model = "scripted-review-model"
         self.applies_to = applies_to
+        self.statements = statements
 
     @property
     def estimated_cost(self):
@@ -51,9 +56,10 @@ class _ScriptedReviewLLM:
                                 "rules": [
                                     {
                                         "source_span_id": span_id,
-                                        "statement": ("Public APIs must stay compatible."),
+                                        "statement": statement,
                                         "applies_to": list(self.applies_to),
                                     }
+                                    for statement in self.statements
                                 ]
                             },
                         )
@@ -136,6 +142,48 @@ class _CheckResultReviewLLM(_ScriptedReviewLLM):
                                         "covers this rule."
                                     ),
                                     "next_step": "Inspect the deterministic check.",
+                                }
+                            ]
+                        },
+                    )
+                ]
+            )
+        return LLMResponse(content="Review complete.")
+
+
+class _IncompleteThenRepairLLM(_ScriptedReviewLLM):
+    def __init__(self, repair=True):
+        super().__init__(
+            applies_to=(),
+            statements=("Rule one.", "Rule two."),
+        )
+        self.repair = repair
+
+    def chat(self, messages, tools=None, on_token=None):
+        tool_names = {
+            schema["function"]["name"] for schema in (tools or [])
+        }
+        if "contract_sources" in tool_names:
+            return super().chat(messages, tools=tools, on_token=on_token)
+
+        call = self.calls["review"]
+        self.calls["review"] += 1
+        rule_ids = re.findall(r"RW-[A-F0-9]+", messages[0]["content"])
+        if call == 0 or (call == 2 and self.repair):
+            rule_id = rule_ids[0] if call == 0 else rule_ids[1]
+            return LLMResponse(
+                tool_calls=[
+                    ToolCall(
+                        f"review-{call}",
+                        "submit_assessments",
+                        {
+                            "assessments": [
+                                {
+                                    "rule_id": rule_id,
+                                    "verdict": "UNVERIFIED",
+                                    "evidence_handles": [],
+                                    "rationale": "没有足够证据。",
+                                    "next_step": "人工检查。",
                                 }
                             ]
                         },
@@ -234,6 +282,20 @@ def _repository_with_check_result(tmp_path, status):
     return result_path
 
 
+def _repository_with_two_rules(tmp_path):
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "repowitness@example.test")
+    _git(tmp_path, "config", "user.name", "RepoWitness Tests")
+    (tmp_path / "AGENTS.md").write_text(
+        "Rule one.\nRule two.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    _git(tmp_path, "add", "AGENTS.md", "app.py")
+    _git(tmp_path, "commit", "-qm", "baseline")
+    (tmp_path / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+
 def test_audit_engine_runs_contract_and_review_agents_end_to_end(tmp_path):
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "repowitness@example.test")
@@ -256,6 +318,42 @@ def test_audit_engine_runs_contract_and_review_agents_end_to_end(tmp_path):
     assert report.rules[0].statement == "Public APIs must stay compatible."
     assert report.assessments[0].verdict == "FAIL"
     assert report.evidence[0].path == "app.py"
+
+
+def test_audit_engine_retries_when_review_agent_submits_only_some_rules(
+    tmp_path,
+):
+    _repository_with_two_rules(tmp_path)
+    llm = _IncompleteThenRepairLLM()
+
+    report = AuditEngine(llm).audit(
+        AuditRequest(repository_path=tmp_path, base_ref="HEAD")
+    )
+
+    assert len(report.assessments) == 2
+    assert all(
+        assessment.limitations == ()
+        for assessment in report.assessments
+    )
+    assert llm.calls["review"] == 4
+
+
+def test_audit_reports_coverage_when_repair_stays_incomplete(tmp_path):
+    _repository_with_two_rules(tmp_path)
+
+    report = AuditEngine(_IncompleteThenRepairLLM(repair=False)).audit(
+        AuditRequest(repository_path=tmp_path, base_ref="HEAD")
+    )
+
+    missing = next(
+        assessment
+        for assessment in report.assessments
+        if assessment.limitations == ("missing assessment",)
+    )
+    issue = report.issues[-1]
+    assert "submitted 1/2" in issue
+    assert missing.rule_id in issue
+    assert "stop_reason=model_response" in issue
 
 
 def test_audit_engine_lets_contract_agent_select_documentation_sources(

@@ -8,7 +8,9 @@ from .base import Tool
 
 class SubmitAssessmentsTool(Tool):
     name = "submit_assessments"
-    description = "Submit one evidence-backed verdict for each assigned repository rule."
+    description = (
+        "Submit evidence-backed verdicts in batches until complete is true."
+    )
     parameters = {
         "type": "object",
         "properties": {
