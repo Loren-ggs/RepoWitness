@@ -145,8 +145,8 @@ runs:
         PY
         comment_id="$(
           gh api --paginate --slurp \
-            "repos/${GITHUB_REPOSITORY}/issues/${GITHUB_EVENT_NUMBER}/comments?per_page=100" \
-            --jq 'map(.[]) | map(select(.body | startswith("<!-- repowitness-report -->"))) | first | .id // empty'
+            "repos/${GITHUB_REPOSITORY}/issues/${GITHUB_EVENT_NUMBER}/comments?per_page=100" |
+            jq -r 'map(.[]) | map(select(.body | startswith("<!-- repowitness-report -->"))) | first | .id // empty'
         )"
         if [[ -n "${comment_id}" ]]; then
           jq -Rs '{body: .}' < "${comment_body}" |

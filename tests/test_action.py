@@ -1,3 +1,4 @@
+import re
 import subprocess
 from pathlib import Path
 
@@ -27,7 +28,7 @@ def test_composite_action_manifest_and_shell_are_parseable():
         if "run" in step:
             subprocess.run(
                 ["bash", "-n"],
-                input=step["run"],
+                input=re.sub(r"\$\{\{.*?\}\}", "expression", step["run"]),
                 text=True,
                 check=True,
                 capture_output=True,
@@ -63,6 +64,9 @@ def test_composite_action_updates_a_marker_bound_pr_comment():
     assert "<!-- repowitness-report -->" in action
     assert "issues/${GITHUB_EVENT_NUMBER}/comments" in action
     assert "issues/comments/${comment_id}" in action
+    assert "--slurp" in action
+    assert re.search(r"\|\s+jq -r", action)
+    assert "--jq" not in action
 
 
 def test_pr_workflow_runs_the_local_action_and_uploads_its_report():
