@@ -91,3 +91,13 @@ def test_audit_prompts_require_simplified_chinese_report_content():
 
     assert "Simplified Chinese" in contract_compiler_prompt()
     assert "Simplified Chinese" in review_prompt(())
+
+
+def test_contract_prompt_requires_bounded_model_source_selection():
+    from repowitness.prompt import contract_compiler_prompt
+
+    prompt = contract_compiler_prompt()
+
+    assert "selected_paths" in prompt
+    assert "CLAUDE.md" in prompt
+    assert "12" in prompt

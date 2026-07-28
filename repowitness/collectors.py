@@ -5,12 +5,15 @@ from __future__ import annotations
 import hashlib
 import threading
 
-from .contracts import ContractCatalog
+from .contracts import ContractCatalog, ContractSourceDiscovery
 from .domain import Assessment, ContractConflict, Rule
 
 
 class RuleCollector:
-    def __init__(self, contracts: ContractCatalog):
+    def __init__(
+        self,
+        contracts: ContractCatalog | ContractSourceDiscovery,
+    ):
         self._contracts = contracts
         self._rules: list[Rule] = []
         self._conflicts: list[ContractConflict] = []

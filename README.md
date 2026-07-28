@@ -182,7 +182,9 @@ jobs:
 
 #### 3. 确保仓库中有可审核的文字规则
 
-RepoWitness 会自动发现已有文档。若项目还没有明确规则，可以从根目录
+RepoWitness 会优先读取根目录及适用子目录中的 `AGENTS.md`、`CLAUDE.md`，
+并从 README、`docs/`、ADR、architecture 等候选路径中让 Contract Compiler
+选择看起来像项目规范的文档。若项目还没有明确规则，可以从根目录
 `AGENTS.md` 开始：
 
 ```markdown
@@ -347,10 +349,10 @@ repowitness audit --base main --contracts-ref worktree
 ## 🧱 它如何工作
 
 ```text
-base 中的项目文档 ─┐
-当前 Git diff ─────┼─→ Contract Compiler → Review Agent → 确定性校验 → JSON / Markdown
-只读代码证据 ─────┤
-Snapshot 绑定的 CI ┘
+base 中的项目文档 ─→ contract_sources 选择（最多 12 个 / 150 KB）─┐
+当前 Git diff ──────────────────────────────────────────────────┼─→ Contract Compiler → Review Agent
+只读代码证据 ──────────────────────────────────────────────────┤
+Snapshot 绑定的 CI ─────────────────────────────────────────────┘
 ```
 
 CLI、composite Action 和 reusable workflow 最终都调用同一个 `AuditEngine`。
@@ -359,8 +361,10 @@ RepoWitness 复用 CoreCoder 的 Agent loop、LLM provider、Tool 协议、并�
 
 ## ✨ Current capabilities｜v0.3.1 当前能力
 
-- 自动发现根目录及适用子目录的 `AGENTS.md`、根 README、
-  `CONTRIBUTING.md`、`SECURITY.md`、ADR 和架构 Markdown；
+- 优先包含根目录及适用子目录的 `AGENTS.md`、`CLAUDE.md`，以及根目录
+  `CONTRIBUTING.md`、`SECURITY.md`；
+- Contract Compiler 从根 README 和文档目录候选中选择补充规范来源，
+  每次最多读取 12 个文件、150 KB 正文；
 - README 只提取明确的规范性要求，不把介绍、教程或营销文案当成规则；
 - 默认使用 base contracts，并支持显式 `head` / `worktree` bootstrap；
 - 审核已提交、暂存、未暂存和可选的未跟踪文件；

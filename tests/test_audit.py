@@ -145,6 +145,65 @@ class _CheckResultReviewLLM(_ScriptedReviewLLM):
         return LLMResponse(content="Review complete.")
 
 
+class _DocSelectingReviewLLM(_ScriptedReviewLLM):
+    def chat(self, messages, tools=None, on_token=None):
+        tool_names = {
+            schema["function"]["name"] for schema in (tools or [])
+        }
+        if "contract_sources" not in tool_names:
+            return super().chat(messages, tools=tools, on_token=on_token)
+
+        call = self.calls["contract"]
+        self.calls["contract"] += 1
+        if call == 0:
+            return LLMResponse(
+                tool_calls=[
+                    ToolCall(
+                        "contract-docs-1",
+                        "contract_sources",
+                        {"selected_paths": ["docs/policy.md"]},
+                    )
+                ]
+            )
+        if call == 1:
+            sources = json.loads(messages[-1]["content"])["sources"]
+            source = next(
+                item for item in sources
+                if item["path"] == "docs/policy.md"
+            )
+            return LLMResponse(
+                tool_calls=[
+                    ToolCall(
+                        "contract-docs-2",
+                        "submit_rules",
+                        {
+                            "rules": [
+                                {
+                                    "source_span_id": (
+                                        source["spans"][0]["span_id"]
+                                    ),
+                                    "statement": "Bug fixes require tests.",
+                                    "applies_to": ["**/*.py"],
+                                }
+                            ]
+                        },
+                    )
+                ]
+            )
+        return LLMResponse(content="Contract compilation complete.")
+
+
+class _SkippingContractSelectionLLM:
+    model = "skipping-contract-selection"
+
+    @property
+    def estimated_cost(self):
+        return None
+
+    def chat(self, messages, tools=None, on_token=None):
+        return LLMResponse(content="No tool call.")
+
+
 def _repository_with_check_result(tmp_path, status):
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "repowitness@example.test")
@@ -197,6 +256,56 @@ def test_audit_engine_runs_contract_and_review_agents_end_to_end(tmp_path):
     assert report.rules[0].statement == "Public APIs must stay compatible."
     assert report.assessments[0].verdict == "FAIL"
     assert report.evidence[0].path == "app.py"
+
+
+def test_audit_engine_lets_contract_agent_select_documentation_sources(
+    tmp_path,
+):
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "repowitness@example.test")
+    _git(tmp_path, "config", "user.name", "RepoWitness Tests")
+    (tmp_path / "AGENTS.md").write_text("Keep changes reviewable.\n")
+    policy = tmp_path / "docs" / "policy.md"
+    policy.parent.mkdir()
+    policy.write_text("Bug fixes require tests.\n")
+    (tmp_path / "app.py").write_text("VALUE = 1\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "baseline")
+    (tmp_path / "app.py").write_text("VALUE = 2\n")
+
+    report = AuditEngine(_DocSelectingReviewLLM()).audit(
+        AuditRequest(repository_path=tmp_path, base_ref="HEAD")
+    )
+
+    assert [source.path for source in report.contracts] == [
+        "AGENTS.md",
+        "docs/policy.md",
+    ]
+    assert report.rules[0].source_path == "docs/policy.md"
+
+
+def test_audit_engine_falls_back_to_priority_sources_when_tool_is_skipped(
+    tmp_path,
+):
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "repowitness@example.test")
+    _git(tmp_path, "config", "user.name", "RepoWitness Tests")
+    (tmp_path / "AGENTS.md").write_text("Keep changes reviewable.\n")
+    policy = tmp_path / "docs" / "policy.md"
+    policy.parent.mkdir()
+    policy.write_text("Bug fixes require tests.\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "contracts")
+
+    report = AuditEngine(_SkippingContractSelectionLLM()).audit(
+        AuditRequest(repository_path=tmp_path, base_ref="HEAD")
+    )
+
+    assert [source.path for source in report.contracts] == ["AGENTS.md"]
+    assert any(
+        "did not call contract_sources" in issue
+        for issue in report.issues
+    )
 
 
 def test_audit_accepts_snapshot_bound_passing_check_as_pass_evidence(tmp_path):

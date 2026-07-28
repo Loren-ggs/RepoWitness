@@ -1,8 +1,10 @@
 import json
 import subprocess
 
+import pytest
+
 from repowitness.collectors import AssessmentCollector, RuleCollector
-from repowitness.contracts import ContractCatalog
+from repowitness.contracts import ContractCatalog, ContractSourceDiscovery
 from repowitness.evidence import EvidenceStore
 from repowitness.repository import RepositoryView
 from repowitness.tools.changed_files import ChangedFilesTool
@@ -66,6 +68,75 @@ def test_contract_tools_only_accept_rules_backed_by_real_source_spans(tmp_path):
     assert accepted["rejected"] == [{"index": 1, "reason": "unknown source_span_id: span-invented"}]
     assert collector.rules[0].source_span_id == span_id
     assert collector.rules[0].statement == "Public APIs must stay compatible."
+
+
+def test_contract_sources_tool_loads_only_priority_and_model_selected_docs(
+    tmp_path,
+):
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "repowitness@example.test")
+    _git(tmp_path, "config", "user.name", "RepoWitness Tests")
+    files = {
+        "AGENTS.md": "Public APIs must stay compatible.\n",
+        "docs/policy.md": "Bug fixes require tests.\n",
+        "docs/tutorial.md": "Run the example command.\n",
+    }
+    for relative, content in files.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "contract candidates")
+    repository = RepositoryView.open(tmp_path, base_ref="HEAD")
+    discovery = ContractSourceDiscovery.discover(repository)
+    tool = ContractSourcesTool(discovery)
+    selected_schema = tool.parameters["properties"]["selected_paths"]
+
+    payload = json.loads(
+        tool.execute(selected_paths=["docs/policy.md"])
+    )
+
+    assert selected_schema["maxItems"] == 11
+    assert selected_schema["items"]["enum"] == [
+        "docs/policy.md",
+        "docs/tutorial.md",
+    ]
+    assert [source["path"] for source in payload["sources"]] == [
+        "AGENTS.md",
+        "docs/policy.md",
+    ]
+    assert discovery.catalog is not None
+    assert [source.path for source in discovery.catalog.sources] == [
+        "AGENTS.md",
+        "docs/policy.md",
+    ]
+
+
+def test_contract_sources_tool_rejects_paths_outside_its_candidate_list(
+    tmp_path,
+):
+    _catalog(tmp_path)
+    repository = RepositoryView.open(tmp_path, base_ref="HEAD")
+    discovery = ContractSourceDiscovery.discover(repository)
+    tool = ContractSourcesTool(discovery)
+
+    with pytest.raises(ValueError, match="unknown contract source path"):
+        tool.execute(selected_paths=["src/private.py"])
+    with pytest.raises(ValueError, match="must be a string array"):
+        tool.execute(selected_paths="docs/policy.md")
+
+    assert discovery.catalog is None
+
+
+def test_contract_sources_tool_cannot_replace_an_existing_selection(tmp_path):
+    _catalog(tmp_path)
+    repository = RepositoryView.open(tmp_path, base_ref="HEAD")
+    discovery = ContractSourceDiscovery.discover(repository)
+    tool = ContractSourcesTool(discovery)
+    tool.execute(selected_paths=[])
+
+    with pytest.raises(ValueError, match="already selected"):
+        tool.execute(selected_paths=[])
 
 
 def test_audit_tool_sets_never_register_mutating_or_subagent_tools(tmp_path):
