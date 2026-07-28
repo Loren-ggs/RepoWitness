@@ -90,6 +90,9 @@ class AuditRequest:
     include_untracked: bool = True
     contracts_ref: str = "base"
     check_result_paths: tuple[Path, ...] = ()
+    junit_paths: tuple[Path, ...] = ()
+    sarif_paths: tuple[Path, ...] = ()
+    evidence_snapshot: str | None = None
 
 
 @dataclass(frozen=True)

@@ -265,3 +265,19 @@ repowitness audit --base main
 第二阶段仍不实现 YAML 配置、原生 JUnit/SARIF 解析、自动 PR 评论、
 Required Check 或 `--fail-on`。这些能力在现有来源发现、证据质量和误报率
 稳定后继续推进。
+
+## 13. 第三阶段实现范围
+
+第三阶段保持 Agent 只读、外部检查由调用方执行、证据 snapshot 严格绑定和
+默认 advisory，增加：
+
+1. 自动发现并严格校验 `.repowitness.yml`，显式 CLI 参数覆盖同名配置；
+2. 原生解析 JUnit XML 与 SARIF 2.1.0，并统一转换为现有 `check_result`
+   证据；原生格式必须额外提供生成前记录的 snapshot；
+3. 提供可重复的 `--fail-on fail|warn|unverified`，只对调用方显式选择的
+   结论返回非零；
+4. composite Action 提供同样的 `fail-on` 输入，默认空值仍为 advisory；
+5. composite Action 可选创建或更新一条带固定标记的 PR 评论；调用 workflow
+   必须显式授予 `pull-requests: write` 并传入 token；
+6. GitHub Required Check 继续由仓库分支保护配置，RepoWitness 不调用管理
+   API 自动修改仓库规则。

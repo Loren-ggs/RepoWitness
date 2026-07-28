@@ -231,6 +231,45 @@ def test_audit_accepts_snapshot_bound_failing_check_as_fail_evidence(tmp_path):
     assert report.overall == "FAIL"
 
 
+def test_audit_accepts_snapshot_bound_junit_evidence(tmp_path):
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "repowitness@example.test")
+    _git(tmp_path, "config", "user.name", "RepoWitness Tests")
+    (tmp_path / "AGENTS.md").write_text("The full test suite must pass.\n")
+    (tmp_path / "app.py").write_text("VALUE = 1\n")
+    _git(tmp_path, "add", "AGENTS.md", "app.py")
+    _git(tmp_path, "commit", "-qm", "baseline")
+    (tmp_path / "app.py").write_text("VALUE = 2\n")
+    snapshot = RepositoryView.open(
+        tmp_path,
+        base_ref="HEAD",
+    ).snapshot_identity()
+    result_path = tmp_path.parent / f"{tmp_path.name}-junit.xml"
+    result_path.write_text(
+        """
+<testsuite name="unit">
+  <testcase classname="tests.test_app" name="test_failure">
+    <failure message="failed" />
+  </testcase>
+</testsuite>
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = AuditEngine(_CheckResultReviewLLM("FAIL")).audit(
+        AuditRequest(
+            repository_path=tmp_path,
+            base_ref="HEAD",
+            junit_paths=(result_path,),
+            evidence_snapshot=snapshot,
+        )
+    )
+
+    assert report.overall == "FAIL"
+    assert json.loads(report.evidence[0].content)["name"].startswith("junit:")
+    assert report.issues == ()
+
+
 def test_audit_does_not_silently_drop_rules_with_unusable_model_scopes(
     tmp_path,
 ):
