@@ -23,6 +23,7 @@
 - Model verdicts must cite system-issued rule and evidence identifiers.
 - Validate submitted assessments deterministically and downgrade unsupported `PASS`, `FAIL`, or `WARN` results to `UNVERIFIED`.
 - Canonical JSON is the report source of truth. Render Markdown from the validated report rather than accepting model-generated Markdown.
+- In GitHub workflows, write generated check-result files under `RUNNER_TEMP`, not inside the checked-out repository, so they cannot appear as repository changes or bypass the validated check-result evidence channel.
 
 ## Verification
 

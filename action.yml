@@ -16,6 +16,10 @@ inputs:
     description: Python version used to run RepoWitness.
     required: false
     default: "3.13"
+  check-results:
+    description: Newline-separated check-result JSON paths to import.
+    required: false
+    default: ""
 outputs:
   report:
     description: Absolute path to the generated Markdown report.
@@ -40,12 +44,20 @@ runs:
         REPOWITNESS_ACTION_BASE: ${{ inputs.base }}
         REPOWITNESS_ACTION_CONTRACTS_REF: ${{ inputs.contracts-ref }}
         REPOWITNESS_ACTION_OUTPUT: ${{ inputs.output }}
+        REPOWITNESS_ACTION_CHECK_RESULTS: ${{ inputs.check-results }}
       run: |
         report_path="${GITHUB_WORKSPACE}/${REPOWITNESS_ACTION_OUTPUT}"
+        check_result_args=()
+        while IFS= read -r check_result_path; do
+          if [[ -n "${check_result_path}" ]]; then
+            check_result_args+=(--check-results "${check_result_path}")
+          fi
+        done <<< "${REPOWITNESS_ACTION_CHECK_RESULTS}"
         repowitness audit \
           --repository "${GITHUB_WORKSPACE}" \
           --base "${REPOWITNESS_ACTION_BASE}" \
           --contracts-ref "${REPOWITNESS_ACTION_CONTRACTS_REF}" \
+          "${check_result_args[@]}" \
           --format markdown \
           --output "${report_path}"
         cat "${report_path}" >> "${GITHUB_STEP_SUMMARY}"

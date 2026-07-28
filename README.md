@@ -144,7 +144,17 @@ The standard result envelope is:
     {
       "name": "pytest",
       "status": "pass",
-      "summary": "106 tests passed"
+      "summary": "All tests passed"
+    },
+    {
+      "name": "ruff",
+      "status": "pass",
+      "summary": "Ruff completed successfully"
+    },
+    {
+      "name": "compileall",
+      "status": "pass",
+      "summary": "Python sources compiled successfully"
     }
   ]
 }
@@ -162,9 +172,18 @@ steps:
   - uses: Loren-ggs/RepoWitness@v0.2.0
     with:
       base: ${{ github.event.pull_request.base.sha }}
+      check-results: ${{ runner.temp }}/repowitness-check-results.json
     env:
       REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
+
+Generate the standard JSON after running deterministic checks and bind it to
+the output of `repowitness snapshot` captured before those checks. The
+`check-results` input also accepts multiple paths, one per line. Snapshot
+mismatches are reported and the results are not imported. See
+[the repository's PR workflow](.github/workflows/repowitness-pr.yml) for a
+complete pytest, Ruff, and `compileall` collection example that preserves
+failed checks as evidence while the audit remains advisory.
 
 The Markdown report is appended to the GitHub Job Summary. The action remains
 advisory and does not fail the job for a `FAIL` assessment.
@@ -188,7 +207,7 @@ report = AuditEngine(llm).audit(
 )
 ```
 
-Both frontends and future GitHub integration use this same `AuditEngine`.
+Both the CLI and composite GitHub Action use this same `AuditEngine`.
 CoreCoder's agent loop, provider layer, tool protocol, parallel execution,
 interrupt repair, and context compression are reused. RepoWitness adds the
 Git snapshot, contract, evidence, validation, and reporting modules around that
