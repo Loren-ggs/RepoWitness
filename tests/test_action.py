@@ -15,7 +15,7 @@ def test_composite_action_runs_the_shared_cli_with_opt_in_fail_on():
 
     assert "repowitness audit" in action
     assert 'description: "Contract revision: base, head, or worktree."' in action
-    assert '--contracts-ref "${REPOWITNESS_ACTION_CONTRACTS_REF}"' in action
+    assert '--contracts-ref "${contracts_ref}"' in action
     assert 'cat "${report_path}" >> "${GITHUB_STEP_SUMMARY}"' in action
     assert "fail-on:" in action
     assert 'default: ""' in action
@@ -44,6 +44,12 @@ def test_composite_action_defaults_marketplace_inputs_safely():
     assert 'base_ref="${REPOWITNESS_ACTION_BASE:-${REPOWITNESS_EVENT_BASE_SHA:-${REPOWITNESS_DEFAULT_BRANCH}}}"' in source
     assert 'export REPOWITNESS_API_KEY="${REPOWITNESS_ACTION_API_KEY}"' in source
     assert '--base "${base_ref}"' in source
+    assert "python-version: ${{ inputs.python-version || '3.13' }}" in source
+    assert 'contracts_ref="${REPOWITNESS_ACTION_CONTRACTS_REF:-base}"' in source
+    assert 'report_output="${REPOWITNESS_ACTION_OUTPUT:-repowitness-report.md}"' in source
+    assert '--contracts-ref "${contracts_ref}"' in source
+    assert 'report_path="${GITHUB_WORKSPACE}/${report_output}"' in source
+    assert "inputs.comment != 'false'" in source
 
 
 def test_composite_action_base_fallback_priority():
@@ -100,6 +106,7 @@ def test_composite_action_manifest_and_shell_are_parseable():
     action = yaml.safe_load(
         (Path(__file__).parents[1] / "action.yml").read_text(encoding="utf-8")
     )
+    assert action["branding"] == {"icon": "shield", "color": "blue"}
     if sys.platform == "win32":
         pytest.skip("Bash syntax is checked on POSIX GitHub runners")
 
@@ -145,7 +152,7 @@ def test_composite_action_updates_a_marker_bound_pr_comment():
 
     assert "comment:" in action
     assert "github-token:" in action
-    assert "inputs.comment == 'true'" in action
+    assert "inputs.comment != 'false'" in action
     assert "inputs.github-token || github.token" in action
     assert "<!-- repowitness-report -->" in action
     assert "REPOWITNESS_PR_NUMBER: ${{ github.event.pull_request.number }}" in action
@@ -217,7 +224,7 @@ def test_repowitness_workflow_wraps_checkout_audit_comment_and_artifact():
     assert "github.event.pull_request.head.repo.full_name == github.repository" in workflow
     assert "actions/checkout@v6" in workflow
     assert "fetch-depth: 0" in workflow
-    assert "uses: Loren-ggs/RepoWitness@v0" in workflow
+    assert "uses: Loren-ggs/RepoWitness@v0.3.0" in workflow
     assert "api-key: ${{ secrets.api_key }}" in workflow
     assert "comment: ${{ inputs.comment }}" in workflow
     assert "actions/upload-artifact@v7" in workflow

@@ -47,7 +47,7 @@ jobs:
 
       - name: Run RepoWitness
         id: repowitness
-        uses: Loren-ggs/RepoWitness@v0
+        uses: Loren-ggs/RepoWitness@v0.3.0
         with:
           api-key: ${{ secrets.api_key }}
           base: ${{ inputs.base }}

@@ -1,5 +1,8 @@
 name: RepoWitness audit
 description: Evidence-backed review against your repository's own rules.
+branding:
+  icon: shield
+  color: blue
 inputs:
   base:
     description: Optional base Git ref. Defaults to the PR base SHA or repository default branch.
@@ -59,7 +62,7 @@ runs:
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
-        python-version: ${{ inputs.python-version }}
+        python-version: ${{ inputs.python-version || '3.13' }}
         cache: pip
 
     - name: Install RepoWitness
@@ -83,6 +86,8 @@ runs:
         REPOWITNESS_ACTION_FAIL_ON: ${{ inputs.fail-on }}
       run: |
         base_ref="${REPOWITNESS_ACTION_BASE:-${REPOWITNESS_EVENT_BASE_SHA:-${REPOWITNESS_DEFAULT_BRANCH}}}"
+        contracts_ref="${REPOWITNESS_ACTION_CONTRACTS_REF:-base}"
+        report_output="${REPOWITNESS_ACTION_OUTPUT:-repowitness-report.md}"
         if [[ -z "${base_ref}" ]]; then
           echo "RepoWitness 无法确定基准版本；请显式传入 base。" >&2
           exit 1
@@ -90,7 +95,7 @@ runs:
         if [[ -n "${REPOWITNESS_ACTION_API_KEY}" ]]; then
           export REPOWITNESS_API_KEY="${REPOWITNESS_ACTION_API_KEY}"
         fi
-        report_path="${GITHUB_WORKSPACE}/${REPOWITNESS_ACTION_OUTPUT}"
+        report_path="${GITHUB_WORKSPACE}/${report_output}"
         check_result_args=()
         while IFS= read -r check_result_path; do
           if [[ -n "${check_result_path}" ]]; then
@@ -123,7 +128,7 @@ runs:
         repowitness audit \
           --repository "${GITHUB_WORKSPACE}" \
           --base "${base_ref}" \
-          --contracts-ref "${REPOWITNESS_ACTION_CONTRACTS_REF}" \
+          --contracts-ref "${contracts_ref}" \
           "${check_result_args[@]}" \
           "${native_result_args[@]}" \
           "${fail_on_args[@]}" \
@@ -138,7 +143,7 @@ runs:
         echo "exit-code=${audit_status}" >> "${GITHUB_OUTPUT}"
 
     - name: Create or update pull request comment
-      if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' && steps.audit.outputs.report != '' }}
+      if: ${{ always() && inputs.comment != 'false' && github.event_name == 'pull_request' && steps.audit.outputs.report != '' }}
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token || github.token }}
