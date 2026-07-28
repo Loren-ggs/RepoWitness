@@ -86,11 +86,14 @@ DeepSeek。还需要打开：
 
 `Settings → Secrets and variables → Actions → Variables → New repository variable`
 
-创建两个非敏感变量。以下示例与本项目本地 DeepSeek 配置一致：
+创建两个非敏感变量。以下为 DeepSeek 配置示例 ：
 
 ```text
-REPOWITNESS_MODEL = deepseek-v4-flash
-REPOWITNESS_BASE_URL = https://api.deepseek.com
+Name:  REPOWITNESS_MODEL
+Value: deepseek-v4-flash
+
+Name:  REPOWITNESS_BASE_URL
+Value: https://api.deepseek.com
 ```
 
 模型名称和 Base URL 请以实际服务商提供的值为准。DeepSeek 使用
