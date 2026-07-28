@@ -1,7 +1,9 @@
 import re
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -23,6 +25,8 @@ def test_composite_action_manifest_and_shell_are_parseable():
     action = yaml.safe_load(
         (Path(__file__).parents[1] / "action.yml").read_text(encoding="utf-8")
     )
+    if sys.platform == "win32":
+        pytest.skip("Bash syntax is checked on POSIX GitHub runners")
 
     for step in action["runs"]["steps"]:
         if "run" in step:
@@ -62,7 +66,8 @@ def test_composite_action_updates_a_marker_bound_pr_comment():
     assert "github-token:" in action
     assert "inputs.comment == 'true'" in action
     assert "<!-- repowitness-report -->" in action
-    assert "issues/${GITHUB_EVENT_NUMBER}/comments" in action
+    assert "REPOWITNESS_PR_NUMBER: ${{ github.event.pull_request.number }}" in action
+    assert "issues/${REPOWITNESS_PR_NUMBER}/comments" in action
     assert "issues/comments/${comment_id}" in action
     assert "--slurp" in action
     assert re.search(r"\|\s+jq -r", action)

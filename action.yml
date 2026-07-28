@@ -127,6 +127,7 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPOWITNESS_REPORT: ${{ steps.audit.outputs.report }}
+        REPOWITNESS_PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         comment_body="${RUNNER_TEMP}/repowitness-comment.md"
         python - "${REPOWITNESS_REPORT}" "${comment_body}" <<'PY'
@@ -145,7 +146,7 @@ runs:
         PY
         comment_id="$(
           gh api --paginate --slurp \
-            "repos/${GITHUB_REPOSITORY}/issues/${GITHUB_EVENT_NUMBER}/comments?per_page=100" |
+            "repos/${GITHUB_REPOSITORY}/issues/${REPOWITNESS_PR_NUMBER}/comments?per_page=100" |
             jq -r 'map(.[]) | map(select(.body | startswith("<!-- repowitness-report -->"))) | first | .id // empty'
         )"
         if [[ -n "${comment_id}" ]]; then
@@ -156,7 +157,7 @@ runs:
         else
           jq -Rs '{body: .}' < "${comment_body}" |
             gh api --method POST \
-              "repos/${GITHUB_REPOSITORY}/issues/${GITHUB_EVENT_NUMBER}/comments" \
+              "repos/${GITHUB_REPOSITORY}/issues/${REPOWITNESS_PR_NUMBER}/comments" \
               --input - >/dev/null
         fi
 
