@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
 from .domain import ContractSource, SourceSpan
@@ -11,9 +12,33 @@ from .repository import RepositoryError, RepositoryView
 
 _ROOT_POLICIES = {
     "AGENTS.md": ("agent_instructions", 300),
+    "CLAUDE.md": ("agent_instructions", 300),
     "CONTRIBUTING.md": ("contribution_policy", 220),
     "SECURITY.md": ("security_policy", 220),
 }
+_AGENT_INSTRUCTION_FILES = {"AGENTS.md", "CLAUDE.md"}
+_DOC_DIRECTORIES = {
+    "doc",
+    "docs",
+    "adr",
+    "adrs",
+    "architecture",
+    "architectures",
+    "design",
+    "decisions",
+}
+MAX_CONTRACT_FILES = 12
+MAX_CONTRACT_BYTES = 150_000
+MAX_CONTRACT_CANDIDATES = 128
+
+
+@dataclass(frozen=True)
+class ContractCandidate:
+    path: str
+    kind: str
+    scope_path: str
+    priority: int
+    required: bool
 
 
 @dataclass(frozen=True)
@@ -33,47 +58,25 @@ class ContractCatalog:
         revision: str = "base",
         changed_paths: tuple[str, ...] = (),
     ) -> "ContractCatalog":
-        if revision not in {"base", "head", "worktree"}:
-            raise RepositoryError(f"unsupported contract revision: {revision}")
-
-        available = set(repository.list_files(revision=revision))
-        candidates = _contract_candidates(available, changed_paths)
-        sources = []
-        issues = []
-        if len(candidates) > 64:
-            issues.append(
-                f"Contract discovery found {len(candidates)} sources; "
-                "only the first 64 by priority were loaded."
-            )
-        remaining_bytes = 2_000_000
-        for path, kind, scope_path, priority in candidates[:64]:
-            if remaining_bytes <= 0:
-                issues.append(
-                    "Contract source loading stopped at the 2 MB total limit."
-                )
-                break
-            try:
-                text = repository.read_text(
-                    path,
-                    revision=revision,
-                    max_bytes=min(500_000, remaining_bytes),
-                )
-            except RepositoryError as exc:
-                issues.append(f"Skipped contract source {path}: {exc}")
-                continue
-            remaining_bytes -= len(text.encode("utf-8"))
-            spans = tuple(_split_spans(path, text, revision))
-            sources.append(
-                ContractSource(
-                    path=path,
-                    revision=revision,
-                    spans=spans,
-                    kind=kind,
-                    scope_path=scope_path,
-                    priority=priority,
-                )
-            )
-        return cls(sources=tuple(sources), issues=tuple(issues))
+        discovery = ContractSourceDiscovery.discover(
+            repository,
+            revision=revision,
+            changed_paths=changed_paths,
+        )
+        remaining = max(0, MAX_CONTRACT_FILES - len(discovery.required))
+        catalog = discovery.load(discovery.optional_paths[:remaining])
+        if len(discovery.required) + len(discovery.optional) <= MAX_CONTRACT_FILES:
+            return catalog
+        return cls(
+            sources=catalog.sources,
+            issues=(
+                f"Contract discovery found "
+                f"{len(discovery.required) + len(discovery.optional)} sources; "
+                f"only the first {MAX_CONTRACT_FILES} by priority were loaded "
+                f"because of the {MAX_CONTRACT_FILES}-file limit.",
+                *catalog.issues,
+            ),
+        )
 
     def span(self, span_id: str) -> SourceSpan | None:
         return next(
@@ -92,51 +95,278 @@ class ContractCatalog:
         )
 
 
+@dataclass
+class ContractSourceDiscovery:
+    repository: RepositoryView
+    revision: str
+    required: tuple[ContractCandidate, ...]
+    optional: tuple[ContractCandidate, ...]
+    issues: tuple[str, ...] = ()
+    _catalog: ContractCatalog | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock,
+        init=False,
+        repr=False,
+    )
+
+    @classmethod
+    def discover(
+        cls,
+        repository: RepositoryView,
+        *,
+        revision: str = "base",
+        changed_paths: tuple[str, ...] = (),
+    ) -> "ContractSourceDiscovery":
+        if revision not in {"base", "head", "worktree"}:
+            raise RepositoryError(f"unsupported contract revision: {revision}")
+        candidates = _contract_candidates(
+            set(repository.list_files(revision=revision)),
+            changed_paths,
+        )
+        required = tuple(
+            candidate for candidate in candidates if candidate.required
+        )
+        optional = tuple(
+            candidate for candidate in candidates if not candidate.required
+        )
+        issues = ()
+        if len(optional) > MAX_CONTRACT_CANDIDATES:
+            issues = (
+                f"Contract discovery found {len(optional)} optional candidates; "
+                f"only the first {MAX_CONTRACT_CANDIDATES} paths were exposed "
+                "to the contract compiler.",
+            )
+            optional = optional[:MAX_CONTRACT_CANDIDATES]
+        return cls(
+            repository=repository,
+            revision=revision,
+            required=required,
+            optional=optional,
+            issues=issues,
+        )
+
+    @property
+    def optional_paths(self) -> tuple[str, ...]:
+        return tuple(candidate.path for candidate in self.optional)
+
+    @property
+    def max_optional_files(self) -> int:
+        return max(0, MAX_CONTRACT_FILES - len(self.required))
+
+    @property
+    def catalog(self) -> ContractCatalog | None:
+        with self._lock:
+            return self._catalog
+
+    def load(self, selected_paths: tuple[str, ...] | list[str]) -> ContractCatalog:
+        if (
+            not isinstance(selected_paths, (list, tuple))
+            or any(not isinstance(path, str) for path in selected_paths)
+        ):
+            raise ValueError("selected contract paths must be a string array")
+        selected = tuple(selected_paths)
+        if len(selected) != len(set(selected)):
+            raise ValueError("selected contract paths must be unique")
+        unknown = set(selected) - set(self.optional_paths)
+        if unknown:
+            raise ValueError(
+                f"unknown contract source path: {sorted(unknown)[0]}"
+            )
+        if len(selected) > self.max_optional_files:
+            raise ValueError(
+                f"at most {self.max_optional_files} optional contract sources "
+                "can be selected"
+            )
+
+        with self._lock:
+            if self._catalog is not None:
+                raise ValueError("contract sources were already selected")
+            by_path = {
+                candidate.path: candidate for candidate in self.optional
+            }
+            candidates = self.required[:MAX_CONTRACT_FILES] + tuple(
+                by_path[path] for path in selected
+            )
+            issues = list(self.issues)
+            if len(self.required) > MAX_CONTRACT_FILES:
+                issues.append(
+                    f"Contract discovery found {len(self.required)} priority "
+                    f"sources; only {MAX_CONTRACT_FILES} fit the file limit."
+                )
+            catalog = _load_catalog(
+                self.repository,
+                self.revision,
+                candidates,
+                issues,
+            )
+            self._catalog = catalog
+        return catalog
+
+    def span(self, span_id: str) -> SourceSpan | None:
+        catalog = self.catalog
+        return catalog.span(span_id) if catalog else None
+
+    def source_for_span(self, span_id: str) -> ContractSource | None:
+        catalog = self.catalog
+        return catalog.source_for_span(span_id) if catalog else None
+
+
+def _load_catalog(
+    repository: RepositoryView,
+    revision: str,
+    candidates: tuple[ContractCandidate, ...],
+    issues: list[str],
+) -> ContractCatalog:
+    sources = []
+    remaining_bytes = MAX_CONTRACT_BYTES
+    for candidate in candidates:
+        if remaining_bytes <= 0:
+            issues.append(
+                f"Contract source loading stopped at the "
+                f"{MAX_CONTRACT_BYTES}-byte total limit."
+            )
+            break
+        try:
+            text = repository.read_text(
+                candidate.path,
+                revision=revision,
+                max_bytes=min(500_000, remaining_bytes),
+            )
+        except RepositoryError as exc:
+            issues.append(
+                f"Skipped contract source {candidate.path}: {exc}"
+            )
+            continue
+        remaining_bytes -= len(text.encode("utf-8"))
+        sources.append(
+            ContractSource(
+                path=candidate.path,
+                revision=revision,
+                spans=tuple(
+                    _split_spans(candidate.path, text, revision)
+                ),
+                kind=candidate.kind,
+                scope_path=candidate.scope_path,
+                priority=candidate.priority,
+            )
+        )
+    return ContractCatalog(sources=tuple(sources), issues=tuple(issues))
+
+
 def _contract_candidates(
     available: set[str],
     changed_paths: tuple[str, ...],
-) -> tuple[tuple[str, str, str, int], ...]:
-    candidates: dict[str, tuple[str, str, int]] = {}
+) -> tuple[ContractCandidate, ...]:
+    candidates: dict[str, ContractCandidate] = {}
 
     for path, (kind, priority) in _ROOT_POLICIES.items():
         if path in available:
-            candidates[path] = (kind, "", priority)
+            candidates[path] = ContractCandidate(
+                path=path,
+                kind=kind,
+                scope_path="",
+                priority=priority,
+                required=True,
+            )
 
     for path in available:
         pure = PurePosixPath(path)
         lower_name = pure.name.lower()
         lower_parts = tuple(part.lower() for part in pure.parts)
 
-        if pure.name == "AGENTS.md" and pure.parent != PurePosixPath("."):
+        if (
+            pure.name in _AGENT_INSTRUCTION_FILES
+            and pure.parent != PurePosixPath(".")
+        ):
             scope_path = pure.parent.as_posix()
-            if any(_path_is_in_scope(changed_path, scope_path) for changed_path in changed_paths):
-                candidates[path] = (
-                    "agent_instructions",
-                    scope_path,
-                    300 + len(pure.parent.parts),
+            if any(
+                _path_is_in_scope(changed_path, scope_path)
+                for changed_path in changed_paths
+            ):
+                candidates[path] = ContractCandidate(
+                    path=path,
+                    kind="agent_instructions",
+                    scope_path=scope_path,
+                    priority=300 + len(pure.parent.parts),
+                    required=True,
                 )
             continue
 
-        if pure.parent == PurePosixPath(".") and lower_name.startswith("readme") and pure.suffix.lower() == ".md":
-            candidates[path] = ("readme", "", 100)
+        if (
+            pure.parent == PurePosixPath(".")
+            and lower_name.startswith("readme")
+            and pure.suffix.lower() == ".md"
+        ):
+            candidates[path] = ContractCandidate(
+                path=path,
+                kind="readme",
+                scope_path="",
+                priority=100,
+                required=False,
+            )
             continue
 
-        is_architecture = (
-            lower_name in {"architecture.md", "architectures.md"}
-            or any(part in {"adr", "adrs", "architecture", "architectures"} for part in lower_parts[:-1])
+        is_architecture_name = lower_name in {
+            "architecture.md",
+            "architectures.md",
+        }
+        if pure.suffix.lower() != ".md" or not (
+            is_architecture_name
+            or any(part in _DOC_DIRECTORIES for part in lower_parts[:-1])
+        ):
+            continue
+        kind = (
+            "adr"
+            if any(
+                part in {"adr", "adrs", "decisions"}
+                for part in lower_parts
+            )
+            else "architecture"
+            if is_architecture_name or any(
+                part in {"architecture", "architectures", "design"}
+                for part in lower_parts
+            )
+            else "documentation"
         )
-        if is_architecture and pure.suffix.lower() == ".md":
-            kind = "adr" if any(part in {"adr", "adrs"} for part in lower_parts) else "architecture"
-            candidates[path] = (kind, "", 180)
+        candidates[path] = ContractCandidate(
+            path=path,
+            kind=kind,
+            scope_path="",
+            priority=180 if kind in {"adr", "architecture"} else 120,
+            required=False,
+        )
 
-    ordered = sorted(
+    root_order = {path: index for index, path in enumerate(_ROOT_POLICIES)}
+    required = sorted(
         (
-            (path, kind, scope_path, priority)
-            for path, (kind, scope_path, priority) in candidates.items()
+            candidate
+            for candidate in candidates.values()
+            if candidate.required
         ),
-        key=lambda item: (-item[3], item[0].count("/"), item[0].lower()),
+        key=lambda candidate: (
+            0 if candidate.path in root_order else 1,
+            root_order.get(candidate.path, 0),
+            -candidate.priority,
+            candidate.path.lower(),
+        ),
     )
-    return tuple(ordered)
+    optional = sorted(
+        (
+            candidate
+            for candidate in candidates.values()
+            if not candidate.required
+        ),
+        key=lambda candidate: (
+            -candidate.priority,
+            candidate.path.count("/"),
+            candidate.path.lower(),
+        ),
+    )
+    return tuple(required + optional)
 
 
 def is_contract_path(path: str) -> bool:
@@ -144,18 +374,18 @@ def is_contract_path(path: str) -> bool:
     pure = PurePosixPath(path)
     lower_name = pure.name.lower()
     lower_parts = tuple(part.lower() for part in pure.parts)
-    if pure.name == "AGENTS.md":
+    if pure.name in _AGENT_INSTRUCTION_FILES:
         return True
     if pure.parent == PurePosixPath(".") and (
         pure.name in _ROOT_POLICIES
         or (lower_name.startswith("readme") and pure.suffix.lower() == ".md")
     ):
         return True
-    return pure.suffix.lower() == ".md" and (
-        lower_name in {"architecture.md", "architectures.md"}
-        or any(
-            part in {"adr", "adrs", "architecture", "architectures"}
-            for part in lower_parts[:-1]
+    return (
+        pure.suffix.lower() == ".md"
+        and (
+            lower_name in {"architecture.md", "architectures.md"}
+            or any(part in _DOC_DIRECTORIES for part in lower_parts[:-1])
         )
     )
 

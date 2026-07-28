@@ -121,7 +121,7 @@ RepoWitness 不会：
 
 ### 6.1 Contract Compiler Agent
 
-职责是读取 base revision 中由确定性代码发现的契约文档，并将自然语言规范编译成结构化规则。
+职责是从 base revision 的安全候选路径中选择契约文档，并将自然语言规范编译成结构化规则。根目录和适用子目录中的 `AGENTS.md`、`CLAUDE.md`，以及根目录 `CONTRIBUTING.md`、`SECURITY.md` 优先包含；README 和文档目录候选由模型通过 `contract_sources(selected_paths=...)` 选择。最终最多读取 12 个文件、150 KB 正文。
 
 第一阶段工具：
 
@@ -246,17 +246,19 @@ repowitness audit --base main
 第二阶段保持第一阶段的只读、证据绑定和 advisory 边界，增加：
 
 1. 使用 `--contracts-ref base|head|worktree` 将 diff base 与规范来源版本分离；
-2. 自动发现根 README、`CONTRIBUTING.md`、`SECURITY.md`、ADR、架构文档，
-   以及变更路径祖先目录中的嵌套 `AGENTS.md`；
-3. README 只提取含明确约束语义的规范，不把介绍、教程和示例当作规则；
-4. 以规范来源目录作为强制作用域，再叠加模型提交的 `applies_to` glob；
-5. 记录来源类型和优先级，结构化输出显式规范冲突及其解析状态；
-6. 单独列出本次变更涉及的规范文档，默认仍以 base 规则审查；
-7. 为 Review Agent 增加只读 `rules`、`glob_repository`、
+2. 优先包含根目录 `AGENTS.md`、`CLAUDE.md`、`CONTRIBUTING.md`、
+   `SECURITY.md`，以及变更路径祖先目录中的嵌套 `AGENTS.md`、`CLAUDE.md`；
+3. 由 Contract Compiler 从根 README 和 docs、ADR、architecture、design、
+   decisions 等文档候选中选择补充来源；每次最多读取 12 个文件、150 KB 正文；
+4. README 和普通文档只提取含明确约束语义的规范，不把介绍、教程和示例当作规则；
+5. 以规范来源目录作为强制作用域，再叠加模型提交的 `applies_to` glob；
+6. 记录来源类型和优先级，结构化输出显式规范冲突及其解析状态；
+7. 单独列出本次变更涉及的规范文档，默认仍以 base 规则审查；
+8. 为 Review Agent 增加只读 `rules`、`glob_repository`、
    `grep_repository` 和 `check_results`；
-8. 支持导入 snapshot 严格匹配的标准 check-result JSON，但不执行检查；
-9. 提供 `repowitness snapshot` 生成外部证据绑定值；
-10. 提供 composite GitHub Action，并把 Markdown 写入 Job Summary。
+9. 支持导入 snapshot 严格匹配的标准 check-result JSON，但不执行检查；
+10. 提供 `repowitness snapshot` 生成外部证据绑定值；
+11. 提供 composite GitHub Action，并把 Markdown 写入 Job Summary。
 
 `applies_to` 是可选的仓库相对 glob，只有规范原文明确限定路径时才应提交。
 如果模型提交的模式匹配不到仓库中的任何已知路径，系统必须回退到确定性的

@@ -14,8 +14,8 @@ review advice.
 
 RepoWitness combines:
 
-- repository contracts including `AGENTS.md`, README files, contribution and
-  security policies, ADRs, and architecture documents;
+- repository contracts including `AGENTS.md`, `CLAUDE.md`, README files,
+  contribution and security policies, ADRs, and architecture documents;
 - the current Git diff;
 - related repository files;
 - optional external check results bound to the exact audit snapshot;
@@ -53,9 +53,11 @@ Version `0.3.1` currently supports:
 
 - `repowitness audit --base <ref>`;
 - base contracts by default, with explicit `head` and `worktree` bootstrap modes;
-- root and scoped `AGENTS.md`, root README files, `CONTRIBUTING.md`,
-  `SECURITY.md`, ADR, and architecture document discovery;
-- normative-only README extraction guidance;
+- priority inclusion of root and scoped `AGENTS.md` and `CLAUDE.md`, plus root
+  `CONTRIBUTING.md` and `SECURITY.md`;
+- model selection from root README and documentation candidates, bounded to
+  12 files and 150 KB of contract text;
+- normative-only README and documentation extraction guidance;
 - deterministic source scope, rule glob, and priority filtering;
 - separate contract-change and explicit conflict reporting;
 - tracked, staged, unstaged, and untracked worktree changes;
