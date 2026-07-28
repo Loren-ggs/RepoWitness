@@ -9,7 +9,7 @@ from .check_results import (
     repository_result_paths,
 )
 from .collectors import AssessmentCollector, RuleCollector
-from .contracts import ContractCatalog, is_contract_path
+from .contracts import ContractSourceDiscovery, is_contract_path
 from .domain import AuditReport, AuditRequest
 from .evidence import EvidenceStore
 from .prompt import contract_compiler_prompt, review_prompt
@@ -29,23 +29,40 @@ class AuditEngine:
             base_ref=request.base_ref,
         )
         changes = tuple(repository.changed_files(include_untracked=request.include_untracked))
-        contracts = ContractCatalog.discover(
+        contract_discovery = ContractSourceDiscovery.discover(
             repository,
             revision=request.contracts_ref,
             changed_paths=tuple(change.path for change in changes),
         )
-        rule_collector = RuleCollector(contracts)
-        issues = list(contracts.issues)
+        rule_collector = RuleCollector(contract_discovery)
+        issues = list(contract_discovery.issues)
+        has_contract_candidates = bool(
+            contract_discovery.required or contract_discovery.optional
+        )
 
-        if contracts.spans:
+        if has_contract_candidates:
             contract_agent = Agent(
                 llm=self._llm,
-                tools=build_contract_tools(contracts, rule_collector),
+                tools=build_contract_tools(
+                    contract_discovery,
+                    rule_collector,
+                ),
                 system=contract_compiler_prompt(),
                 max_rounds=15,
             )
             contract_agent.chat("Compile the authoritative repository contract into rules.")
-        else:
+        contracts = contract_discovery.catalog
+        if contracts is None:
+            contracts = contract_discovery.load(())
+            if has_contract_candidates:
+                issues.append(
+                    "The contract compiler did not call contract_sources; "
+                    "only priority sources were loaded."
+                )
+        issues.extend(
+            issue for issue in contracts.issues if issue not in issues
+        )
+        if not contracts.spans:
             issues.append(
                 f"No repository contract sources were found at {request.contracts_ref}."
             )
