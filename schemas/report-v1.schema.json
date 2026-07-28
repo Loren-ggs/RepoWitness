@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Loren-ggs/RepoWitness/schemas/report-v1.schema.json",
-  "title": "RepoWitness Audit Report v1",
+  "title": "RepoWitness Report v1",
   "type": "object",
   "required": [
     "schema_version",

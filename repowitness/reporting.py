@@ -6,6 +6,8 @@ import json
 
 from .domain import AuditReport
 
+_VERDICT_DISPLAY_ORDER = ("FAIL", "WARN", "UNVERIFIED", "PASS")
+
 
 def report_to_dict(report: AuditReport) -> dict:
     spans = {span.span_id: span for source in report.contracts for span in source.spans}
@@ -139,7 +141,10 @@ def render_markdown(report: AuditReport) -> str:
         "",
         f"**总体结论：{summary['overall']}**",
         "",
-        (f"PASS {counts['PASS']} · FAIL {counts['FAIL']} · WARN {counts['WARN']} · UNVERIFIED {counts['UNVERIFIED']}"),
+        " · ".join(
+            f"{verdict} {counts[verdict]}"
+            for verdict in _VERDICT_DISPLAY_ORDER
+        ),
         (
             f"规则：编译 {summary['rules_discovered']} · "
             f"适用 {summary['rules_applicable']} · "
@@ -216,7 +221,10 @@ def render_markdown(report: AuditReport) -> str:
     if not payload["assessments"]:
         lines.append("没有可评估的规则。")
 
-    for assessment in payload["assessments"]:
+    for assessment in sorted(
+        payload["assessments"],
+        key=lambda item: _VERDICT_DISPLAY_ORDER.index(item["verdict"]),
+    ):
         rule = assessment["rule"]
         source = rule["source"]
         location = (

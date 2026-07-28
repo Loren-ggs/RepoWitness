@@ -121,3 +121,50 @@ def test_worktree_contract_change_notice_names_the_selected_revision():
 
     assert "本次审查显式使用 `worktree` 版本规范" in markdown
     assert "默认仍以 base 版本规范审查" not in markdown
+
+
+def test_markdown_lists_non_passing_results_before_passes():
+    report = _report()
+    verdicts = ("PASS", "UNVERIFIED", "WARN", "FAIL")
+    spans = tuple(
+        replace(
+            report.contracts[0].spans[0],
+            span_id=f"span-{verdict.lower()}",
+            text=f"{verdict} source quote.",
+        )
+        for verdict in verdicts
+    )
+    rules = tuple(
+        replace(
+            report.rules[0],
+            rule_id=f"RW-{verdict}",
+            source_span_id=span.span_id,
+            statement=f"{verdict} rule.",
+        )
+        for verdict, span in zip(verdicts, spans)
+    )
+    assessments = tuple(
+        replace(
+            report.assessments[0],
+            rule_id=rule.rule_id,
+            verdict=verdict,
+            evidence_handles=(),
+        )
+        for verdict, rule in zip(verdicts, rules)
+    )
+    report = replace(
+        report,
+        contracts=(replace(report.contracts[0], spans=spans),),
+        rules=rules,
+        assessments=assessments,
+        evidence=(),
+    )
+
+    markdown = render_markdown(report)
+
+    assert "FAIL 1 · WARN 1 · UNVERIFIED 1 · PASS 1" in markdown
+    positions = [
+        markdown.index(f"### {verdict} ·")
+        for verdict in ("FAIL", "WARN", "UNVERIFIED", "PASS")
+    ]
+    assert positions == sorted(positions)

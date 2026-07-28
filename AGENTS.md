@@ -10,6 +10,8 @@
 - Advisory mode is the default. A completed audit may report `FAIL` without returning a failing process exit code.
 - Consume deterministic test, lint, pre-commit, or SARIF evidence; do not execute repository commands from the review agent.
 - Keep the external reusable workflow consumer-facing name and path concise: `RepoWitness` at `.github/workflows/repowitness.yml`.
+- Use only `RepoWitness` / `repowitness` as the external product and Marketplace name; keep `audit` only for internal domain terms and the stable CLI subcommand.
+- Keep the CLI and Action metadata advisory by default for compatibility, but make the recommended PR workflow opt into `fail_on: fail` and document the matching required status check.
 
 ## CoreCoder inheritance
 
@@ -34,4 +36,5 @@
 - Add behavior tests through public interfaces for every new repository, contract, evidence, validation, or reporting capability.
 - Tests that read repository text must specify UTF-8 explicitly, and cross-platform subprocess tests must preserve the parent environment.
 - Run composite Action Bash syntax checks only on POSIX; the Windows matrix should not treat Git Bash stdin parsing as equivalent to a GitHub runner's `shell: bash`.
+- Validate caller-workflow changes with a new PR event whose base contains the new workflow; re-running an older run does not prove that later inputs or job names were applied.
 - Run the full test suite, Ruff, and `compileall` before committing.

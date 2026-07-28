@@ -1,4 +1,4 @@
-name: RepoWitness PR audit
+name: RepoWitness
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  audit:
+  repowitness:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.head.repo.full_name == github.repository
@@ -114,7 +114,7 @@ jobs:
           REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
           REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
 
-      - name: Upload audit report
+      - name: Upload RepoWitness report
         uses: actions/upload-artifact@v7
         with:
           name: repowitness-report

@@ -6,7 +6,7 @@
     给出可追溯的 <code>PASS</code> / <code>FAIL</code> / <code>WARN</code> / <code>UNVERIFIED</code> 审核结果。
   </p>
   <p>
-    <a href="https://github.com/marketplace/actions/repowitness-advisory-audit">GitHub Marketplace</a>
+    <a href="https://github.com/marketplace/actions/repowitness">GitHub Marketplace</a>
     ·
     <a href="https://pypi.org/project/repowitness/">PyPI</a>
     ·
@@ -115,11 +115,17 @@ permissions:
   pull-requests: write
 
 jobs:
-  audit:
-    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.3.0
+  repowitness:
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.3.1
+    with:
+      fail_on: fail
     secrets:
       api_key: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
+
+这个推荐配置会在报告包含 `FAIL` 时让 `repowitness / repowitness` 检查显示
+红叉。若还要禁止合并，请在目标分支的 GitHub Ruleset 中把
+`repowitness / repowitness` 配置为 Required Status Check。
 
 可复用 workflow 会自动把调用仓库中的 Variables 注入为：
 
@@ -151,7 +157,7 @@ OpenAI 配置；创建后则按指定的 OpenAI-compatible 模型和地址调用
 
 ```yaml
 jobs:
-  audit:
+  repowitness:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -161,16 +167,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: Loren-ggs/RepoWitness@v0.3.0
+      - uses: Loren-ggs/RepoWitness@v0.3.1
         env:
           REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
           REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
         with:
           api-key: ${{ secrets.REPOWITNESS_API_KEY }}
+          fail-on: fail
 ```
 
 `base`、`contracts-ref`、`output`、`python-version`、`comment` 等可选字段都
-可以删除或留空；v0.3.0 会恢复安全默认值。Marketplace 无法替你创建或读取
+可以删除或留空；v0.3.1 会恢复安全默认值。Marketplace 无法替你创建或读取
 第三方模型密钥，所以 `REPOWITNESS_API_KEY` 仍需在目标仓库配置一次。
 
 #### 3. 确保仓库中有可审核的文字规则
@@ -200,7 +207,7 @@ REPOWITNESS_API_KEY=sk-...
 然后一行安装并审核：
 
 ```bash
-python -m pip install -q repowitness==0.3.0 && repowitness audit --base main
+python -m pip install -q repowitness==0.3.1 && repowitness audit --base main
 ```
 
 已经安装后，日常只需：
@@ -301,9 +308,10 @@ RepoWitness 只解析 JUnit XML、SARIF 2.1.0 或标准 check-result JSON，不�
 完整的 pytest、Ruff、`compileall` 采集示例见
 [项目自身的 PR workflow](.github/workflows/repowitness-pr.yml)。
 
-### 需要时才阻止合并
+### `FAIL` 如何阻止合并
 
-默认是 advisory 模式：报告出现 `FAIL`，完整审核仍返回退出码 `0`。
+CLI 和 Action 元数据为兼容既有调用仍默认 advisory；上面的推荐 PR workflow
+已经显式传入 `fail_on: fail`，报告出现 `FAIL` 时会返回非零并显示红叉。
 
 本地显式启用：
 
@@ -319,8 +327,12 @@ with:
   fail-on: fail
 ```
 
-再把对应 workflow job 配置为 GitHub Required Check，即可让指定结论阻止合并。
-仓库、配置、模型调用或报告生成错误始终返回非零。
+再把 `repowitness / repowitness` 配置为 GitHub Required Check，即可让
+`FAIL` 阻止合并。仓库、配置、模型调用或报告生成错误始终返回非零。
+
+修改 workflow 后不要只对旧 run 点击 **Re-run jobs**：旧 run 会继续使用
+触发当时 base commit 中的 workflow。请更新 PR 分支、重新打开 PR 或新建 PR，
+触发一条新的 `pull_request` run，再确认 Inputs 中显示 `fail_on: fail`。
 
 ### 首次引入规则
 
@@ -345,7 +357,7 @@ CLI、composite Action 和 reusable workflow 最终都调用同一个 `AuditEngi
 RepoWitness 复用 CoreCoder 的 Agent loop、LLM provider、Tool 协议、并行执行、
 中断回填和上下文压缩，并在外层增加 Git Snapshot、契约、证据校验与报告模块。
 
-## ✨ Current capabilities｜v0.3.0 当前能力
+## ✨ Current capabilities｜v0.3.1 当前能力
 
 - 自动发现根目录及适用子目录的 `AGENTS.md`、根 README、
   `CONTRIBUTING.md`、`SECURITY.md`、ADR 和架构 Markdown；

@@ -1,4 +1,4 @@
-name: RepoWitness audit
+name: RepoWitness
 description: Evidence-backed review against your repository's own rules.
 branding:
   icon: shield
@@ -69,7 +69,7 @@ runs:
       shell: bash
       run: python -m pip install "${{ github.action_path }}"
 
-    - name: Run contract audit
+    - name: Run RepoWitness
       id: audit
       shell: bash
       env:

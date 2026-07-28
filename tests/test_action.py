@@ -106,6 +106,7 @@ def test_composite_action_manifest_and_shell_are_parseable():
     action = yaml.safe_load(
         (Path(__file__).parents[1] / "action.yml").read_text(encoding="utf-8")
     )
+    assert action["name"] == "RepoWitness"
     assert action["branding"] == {"icon": "shield", "color": "blue"}
     if sys.platform == "win32":
         pytest.skip("Bash syntax is checked on POSIX GitHub runners")
@@ -207,7 +208,7 @@ def test_pr_workflow_collects_snapshot_bound_deterministic_checks():
     )
 
 
-def test_repowitness_workflow_wraps_checkout_audit_comment_and_artifact():
+def test_repowitness_workflow_wraps_checkout_review_comment_and_artifact():
     workflow = (
         Path(__file__).parents[1]
         / ".github"
@@ -224,10 +225,26 @@ def test_repowitness_workflow_wraps_checkout_audit_comment_and_artifact():
     assert "github.event.pull_request.head.repo.full_name == github.repository" in workflow
     assert "actions/checkout@v6" in workflow
     assert "fetch-depth: 0" in workflow
-    assert "uses: Loren-ggs/RepoWitness@v0.3.0" in workflow
+    assert "jobs:\n  repowitness:" in workflow
+    assert "uses: Loren-ggs/RepoWitness@v0.3.1" in workflow
     assert "api-key: ${{ secrets.api_key }}" in workflow
     assert "REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}" in workflow
     assert "REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}" in workflow
     assert "comment: ${{ inputs.comment }}" in workflow
     assert "actions/upload-artifact@v7" in workflow
     assert "steps.repowitness.outputs.report" in workflow
+
+
+def test_public_docs_use_the_enforcing_repowitness_quickstart():
+    root = Path(__file__).parents[1]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    readme_en = (root / "README_EN.md").read_text(encoding="utf-8")
+
+    for document in (readme, readme_en):
+        assert "uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.3.1" in document
+        assert "jobs:\n  repowitness:" in document
+        assert "with:\n      fail_on: fail" in document
+
+    assert "https://github.com/marketplace/actions/repowitness" in readme
+    assert "repowitness-advisory-audit" not in readme
+    assert "marketplace/actions/repowitness-audit" not in readme

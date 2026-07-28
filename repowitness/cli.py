@@ -260,7 +260,7 @@ def main(
         else:
             print(rendered, end="", file=stdout)
     except Exception as exc:
-        print(f"RepoWitness audit failed: {exc}", file=stderr)
+        print(f"RepoWitness failed: {exc}", file=stderr)
         return 1
 
     if any(report.counts[verdict.upper()] for verdict in options["fail_on"]):
