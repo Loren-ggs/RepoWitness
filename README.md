@@ -27,6 +27,8 @@
 RepoWitness 是一个只读、证据驱动的仓库契约审核 Agent。它不会给出泛化的
 “AI Code Review 建议”，而是专门审核当前改动是否符合这个仓库自己的
 `AGENTS.md`、README、贡献规范、安全策略、ADR 和架构文档。
+它要求每条适用规则都有可追溯结论；模型遗漏的规则会被追问，仍未覆盖时则
+明确标记为 `UNVERIFIED`，不会从报告中静默消失。
 
 ## 🔍 What it reviews｜它审核什么
 
@@ -116,7 +118,7 @@ permissions:
 
 jobs:
   repowitness:
-    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.3.1
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.0
     with:
       fail_on: fail
     secrets:
@@ -167,7 +169,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: Loren-ggs/RepoWitness@v0.3.1
+      - uses: Loren-ggs/RepoWitness@v0.4.0
         env:
           REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
           REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
@@ -177,7 +179,7 @@ jobs:
 ```
 
 `base`、`contracts-ref`、`output`、`python-version`、`comment` 等可选字段都
-可以删除或留空；v0.3.1 会恢复安全默认值。Marketplace 无法替你创建或读取
+可以删除或留空；v0.4.0 会恢复安全默认值。Marketplace 无法替你创建或读取
 第三方模型密钥，所以 `REPOWITNESS_API_KEY` 仍需在目标仓库配置一次。
 
 #### 3. 确保仓库中有可审核的文字规则
@@ -209,7 +211,7 @@ REPOWITNESS_API_KEY=sk-...
 然后一行安装并审核：
 
 ```bash
-python -m pip install -q repowitness==0.3.1 && repowitness audit --base main
+python -m pip install -q repowitness==0.4.0 && repowitness audit --base main
 ```
 
 已经安装后，日常只需：
@@ -359,7 +361,7 @@ CLI、composite Action 和 reusable workflow 最终都调用同一个 `AuditEngi
 RepoWitness 复用 CoreCoder 的 Agent loop、LLM provider、Tool 协议、并行执行、
 中断回填和上下文压缩，并在外层增加 Git Snapshot、契约、证据校验与报告模块。
 
-## ✨ Current capabilities｜v0.3.1 当前能力
+## ✨ Current capabilities｜v0.4.0 当前能力
 
 - 优先包含根目录及适用子目录的 `AGENTS.md`、`CLAUDE.md`，以及根目录
   `CONTRIBUTING.md`、`SECURITY.md`；
@@ -371,6 +373,9 @@ RepoWitness 复用 CoreCoder 的 Agent loop、LLM provider、Tool 协议、并�
 - 按嵌套目录作用域、规则 glob 和来源优先级筛选适用规则；
 - 单独报告规范文档变更和模型识别出的显式规范冲突；
 - 使用受仓库路径约束的 diff、read、glob、grep 只读工具；
+- 要求 Review Agent 覆盖全部适用规则，支持分批提交，并对遗漏规则执行一次
+  定向修复；仍缺失的规则会显式生成 `UNVERIFIED` 结论和覆盖率问题；
+- 在提交阶段拒绝不存在的 evidence handle，最终校验仍保持 fail-closed；
 - 导入 Snapshot 绑定的 check-result JSON、JUnit XML 和 SARIF 2.1.0；
 - 严格校验 `.repowitness.yml`，并允许 CLI 覆盖；
 - 输出 canonical JSON、Markdown、Job Summary、PR 评论和 artifact；

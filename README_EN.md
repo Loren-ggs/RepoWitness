@@ -21,6 +21,10 @@ RepoWitness combines:
 - optional external check results bound to the exact audit snapshot;
 - evidence returned by read-only review tools.
 
+Every applicable rule must have a traceable result. RepoWitness asks the
+Review Agent to repair incomplete submissions and explicitly marks any rule
+that remains uncovered as `UNVERIFIED` instead of silently omitting it.
+
 Every evaluated rule receives one verdict:
 
 - `PASS`: positive evidence proves compliance;
@@ -49,7 +53,7 @@ explicit use, but they are not registered in RepoWitness review agents.
 
 ## Current capabilities
 
-Version `0.3.1` currently supports:
+Version `0.4.0` currently supports:
 
 - `repowitness audit --base <ref>`;
 - base contracts by default, with explicit `head` and `worktree` bootstrap modes;
@@ -60,6 +64,10 @@ Version `0.3.1` currently supports:
 - normative-only README and documentation extraction guidance;
 - deterministic source scope, rule glob, and priority filtering;
 - separate contract-change and explicit conflict reporting;
+- complete assessment coverage with batched submissions, one focused repair
+  pass, and explicit `UNVERIFIED` results for rules that remain uncovered;
+- early rejection of unknown evidence handles while preserving final
+  fail-closed validation;
 - tracked, staged, unstaged, and untracked worktree changes;
 - a Contract Compiler Agent and a Review Agent using the same reused agent loop;
 - repository-confined diff, read, glob, and grep tools;
@@ -228,7 +236,7 @@ permissions:
 
 jobs:
   repowitness:
-    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.3.1
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.0
     with:
       fail_on: fail
     secrets:
@@ -267,7 +275,7 @@ steps:
   - uses: actions/checkout@v6
     with:
       fetch-depth: 0
-  - uses: Loren-ggs/RepoWitness@v0.3.1
+  - uses: Loren-ggs/RepoWitness@v0.4.0
     env:
       REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
       REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
