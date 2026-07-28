@@ -47,6 +47,9 @@ def test_composite_action_defaults_marketplace_inputs_safely():
 
 
 def test_composite_action_base_fallback_priority():
+    if sys.platform == "win32":
+        pytest.skip("Composite Action Bash behavior is checked on POSIX runners")
+
     action = (Path(__file__).parents[1] / "action.yml").read_text(
         encoding="utf-8"
     )
