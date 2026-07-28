@@ -1,6 +1,6 @@
 """RepoWitness - evidence-backed review against repository rules."""
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 from repowitness.agent import Agent
 from repowitness.audit import AuditEngine

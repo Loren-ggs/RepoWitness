@@ -118,7 +118,7 @@ permissions:
 
 jobs:
   repowitness:
-    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.0
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.1
     with:
       fail_on: fail
     secrets:
@@ -169,7 +169,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: Loren-ggs/RepoWitness@v0.4.0
+      - uses: Loren-ggs/RepoWitness@v0.4.1
         env:
           REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
           REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
@@ -179,7 +179,7 @@ jobs:
 ```
 
 `base`、`contracts-ref`、`output`、`python-version`、`comment` 等可选字段都
-可以删除或留空；v0.4.0 会恢复安全默认值。Marketplace 无法替你创建或读取
+可以删除或留空；v0.4.1 会恢复安全默认值。Marketplace 无法替你创建或读取
 第三方模型密钥，所以 `REPOWITNESS_API_KEY` 仍需在目标仓库配置一次。
 
 #### 3. 确保仓库中有可审核的文字规则
@@ -211,7 +211,7 @@ REPOWITNESS_API_KEY=sk-...
 然后一行安装并审核：
 
 ```bash
-python -m pip install -q repowitness==0.4.0 && repowitness audit --base main
+python -m pip install -q repowitness==0.4.1 && repowitness audit --base main
 ```
 
 已经安装后，日常只需：
@@ -361,7 +361,7 @@ CLI、composite Action 和 reusable workflow 最终都调用同一个 `AuditEngi
 RepoWitness 复用 CoreCoder 的 Agent loop、LLM provider、Tool 协议、并行执行、
 中断回填和上下文压缩，并在外层增加 Git Snapshot、契约、证据校验与报告模块。
 
-## ✨ Current capabilities｜v0.4.0 当前能力
+## ✨ Current capabilities｜v0.4.1 当前能力
 
 - 优先包含根目录及适用子目录的 `AGENTS.md`、`CLAUDE.md`，以及根目录
   `CONTRIBUTING.md`、`SECURITY.md`；
@@ -379,6 +379,7 @@ RepoWitness 复用 CoreCoder 的 Agent loop、LLM provider、Tool 协议、并�
 - 导入 Snapshot 绑定的 check-result JSON、JUnit XML 和 SARIF 2.1.0；
 - 严格校验 `.repowitness.yml`，并允许 CLI 覆盖；
 - 输出 canonical JSON、Markdown、Job Summary、PR 评论和 artifact；
+- Markdown 规则标题直接展示证据对应的代码文件和行号，规则编号下移到证据区；
 - 默认 advisory，并支持 `--fail-on fail|warn|unverified`；
 - 提供 PyPI CLI、GitHub composite Action 和 reusable workflow。
 

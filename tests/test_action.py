@@ -226,7 +226,7 @@ def test_repowitness_workflow_wraps_checkout_review_comment_and_artifact():
     assert "actions/checkout@v6" in workflow
     assert "fetch-depth: 0" in workflow
     assert "jobs:\n  repowitness:" in workflow
-    assert "uses: Loren-ggs/RepoWitness@v0.4.0" in workflow
+    assert "uses: Loren-ggs/RepoWitness@v0.4.1" in workflow
     assert "api-key: ${{ secrets.api_key }}" in workflow
     assert "REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}" in workflow
     assert "REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}" in workflow
@@ -241,7 +241,7 @@ def test_public_docs_use_the_enforcing_repowitness_quickstart():
     readme_en = (root / "README_EN.md").read_text(encoding="utf-8")
 
     for document in (readme, readme_en):
-        assert "uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.0" in document
+        assert "uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.1" in document
         assert "jobs:\n  repowitness:" in document
         assert "with:\n      fail_on: fail" in document
 

@@ -34,7 +34,13 @@ def _report():
         kind="diff",
         path="app.py",
         revision="base...worktree",
-        content="-def public_api():\n+def renamed_api():",
+        content=(
+            "@@ -10,3 +10,3 @@\n"
+            " unchanged_one = 1\n"
+            " unchanged_two = 2\n"
+            "-def public_api():\n"
+            "+def renamed_api():"
+        ),
     )
     assessment = Assessment(
         rule_id=rule.rule_id,
@@ -101,6 +107,12 @@ def test_json_is_canonical_and_markdown_is_rendered_from_the_same_report():
     assert "not_applicable" in markdown
     assert "Documentation changes require review." in markdown
     assert "FAIL" in markdown
+    assert "### FAIL · `app.py:12`" in markdown
+    assert "### FAIL · RW-ABC123" not in markdown
+    assert "- 规则编号：`RW-ABC123`" in markdown
+    assert markdown.index("evidence-diff") < markdown.index(
+        "规则编号：`RW-ABC123`"
+    )
     assert "AGENTS.md:3" in markdown
     assert "公共 API 必须保持兼容。" in markdown
     assert "公共函数已被重命名。" in markdown
@@ -121,6 +133,37 @@ def test_worktree_contract_change_notice_names_the_selected_revision():
 
     assert "本次审查显式使用 `worktree` 版本规范" in markdown
     assert "默认仍以 base 版本规范审查" not in markdown
+
+
+def test_markdown_does_not_treat_glob_evidence_as_a_code_location():
+    report = _report()
+    evidence = replace(
+        report.evidence[0],
+        handle="evidence-glob",
+        kind="repository_glob",
+        path=None,
+        revision="head",
+        content="",
+    )
+    assessment = replace(
+        report.assessments[0],
+        verdict="UNVERIFIED",
+        evidence_handles=(evidence.handle,),
+    )
+
+    markdown = render_markdown(
+        replace(
+            report,
+            assessments=(assessment,),
+            evidence=(evidence,),
+        )
+    )
+
+    assert "### UNVERIFIED · `未定位到具体代码行`" in markdown
+    assert "`evidence-glob` · `repository_glob` · `head`" in markdown
+    assert markdown.index("evidence-glob") < markdown.index(
+        "规则编号：`RW-ABC123`"
+    )
 
 
 def test_markdown_lists_non_passing_results_before_passes():
@@ -168,3 +211,5 @@ def test_markdown_lists_non_passing_results_before_passes():
         for verdict in ("FAIL", "WARN", "UNVERIFIED", "PASS")
     ]
     assert positions == sorted(positions)
+    assert "### UNVERIFIED · `未定位到具体代码行`" in markdown
+    assert markdown.count("- 证据：\n  - 无可用证据") == 4

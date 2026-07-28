@@ -53,7 +53,7 @@ explicit use, but they are not registered in RepoWitness review agents.
 
 ## Current capabilities
 
-Version `0.4.0` currently supports:
+Version `0.4.1` currently supports:
 
 - `repowitness audit --base <ref>`;
 - base contracts by default, with explicit `head` and `worktree` bootstrap modes;
@@ -75,6 +75,8 @@ Version `0.4.0` currently supports:
 - snapshot-bound native JUnit XML and SARIF 2.1.0 ingestion;
 - strict `.repowitness.yml` configuration with CLI overrides;
 - canonical JSON and Markdown reports;
+- Markdown finding headings that surface the cited code path and line while
+  keeping the rule identifier below the evidence list;
 - a composite GitHub Action that publishes to the Job Summary and can update
   one marker-bound PR comment;
 - advisory exit behavior by default, with opt-in `--fail-on` enforcement.
@@ -236,7 +238,7 @@ permissions:
 
 jobs:
   repowitness:
-    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.0
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.1
     with:
       fail_on: fail
     secrets:
@@ -275,7 +277,7 @@ steps:
   - uses: actions/checkout@v6
     with:
       fetch-depth: 0
-  - uses: Loren-ggs/RepoWitness@v0.4.0
+  - uses: Loren-ggs/RepoWitness@v0.4.1
     env:
       REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
       REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}

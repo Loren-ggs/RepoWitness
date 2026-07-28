@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+import re
 
 from .domain import AuditReport
 
 _VERDICT_DISPLAY_ORDER = ("FAIL", "WARN", "UNVERIFIED", "PASS")
+_DIFF_HUNK = re.compile(
+    r"^@@ -\d+(?:,\d+)? \+(?P<line>\d+)(?:,\d+)? @@"
+)
 
 
 def report_to_dict(report: AuditReport) -> dict:
@@ -227,27 +231,35 @@ def render_markdown(report: AuditReport) -> str:
     ):
         rule = assessment["rule"]
         source = rule["source"]
-        location = (
+        rule_location = (
             f"{source['path']}:{source['start_line']}"
             if source["start_line"] == source["end_line"]
             else (f"{source['path']}:{source['start_line']}-{source['end_line']}")
         )
+        finding_location = _finding_location(assessment["evidence"])
         lines.extend(
             [
-                f"### {assessment['verdict']} · {rule['rule_id']}",
+                f"### {assessment['verdict']} · `{finding_location}`",
                 "",
                 f"> {rule['statement']}",
                 "",
-                f"- 规则来源：`{location}`（{source['revision']}）",
+                f"- 规则来源：`{rule_location}`（{source['revision']}）",
                 f"- 判断依据：{assessment['rationale']}",
                 f"- 下一步：{assessment['next_step']}",
+                "- 证据：",
             ]
         )
         if assessment["evidence"]:
-            lines.append("- 证据：")
             for record in assessment["evidence"]:
-                target = record["path"] or record["kind"]
+                target = (
+                    _evidence_location(record)
+                    or record["path"]
+                    or record["kind"]
+                )
                 lines.append(f"  - `{record['handle']}` · `{target}` · `{record['revision']}`")
+        else:
+            lines.append("  - 无可用证据")
+        lines.append(f"- 规则编号：`{rule['rule_id']}`")
         if assessment["limitations"]:
             lines.append("- 限制：" + "；".join(assessment["limitations"]))
         lines.append("")
@@ -265,3 +277,46 @@ def _evidence_to_dict(record) -> dict:
         "end_line": record.end_line,
         "content": record.content,
     }
+
+
+def _finding_location(evidence: list[dict]) -> str:
+    for record in evidence:
+        if record["kind"] == "diff" and (
+            location := _evidence_location(record)
+        ):
+            return location
+    for record in evidence:
+        if location := _evidence_location(record):
+            return location
+    for record in evidence:
+        if record["path"]:
+            return f"{record['path']}（未定位行号）"
+    return "未定位到具体代码行"
+
+
+def _evidence_location(record: dict) -> str | None:
+    path = record["path"]
+    if not path:
+        return None
+    if record["start_line"] is not None:
+        end_line = record["end_line"]
+        if end_line is not None and end_line != record["start_line"]:
+            return f"{path}:{record['start_line']}-{end_line}"
+        return f"{path}:{record['start_line']}"
+    if record["kind"] == "diff":
+        if line := _first_changed_line(record["content"]):
+            return f"{path}:{line}"
+    return None
+
+
+def _first_changed_line(content: str) -> int | None:
+    new_line = None
+    for line in content.splitlines():
+        if match := _DIFF_HUNK.match(line):
+            new_line = int(match.group("line"))
+        elif new_line is not None:
+            if line.startswith(("+", "-")):
+                return new_line
+            if not line.startswith("\\"):
+                new_line += 1
+    return None
