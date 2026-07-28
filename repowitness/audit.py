@@ -103,7 +103,7 @@ class AuditEngine:
                 result_paths=result_paths,
             )
         )
-        assessment_collector = AssessmentCollector(rules)
+        assessment_collector = AssessmentCollector(rules, evidence)
 
         if rules:
             review_agent = Agent(
@@ -118,7 +118,33 @@ class AuditEngine:
                 system=review_prompt(rules),
                 max_rounds=25,
             )
-            review_agent.chat("Review the current repository changes against every assigned rule.")
+            review_result = review_agent.chat(
+                "Review the current repository changes against every assigned rule."
+            )
+            remaining_rule_ids = assessment_collector.remaining_rule_ids
+            # ponytail: one repair pass bounds model cost; batch rules if this
+            # remains insufficient in real audits.
+            if remaining_rule_ids:
+                review_result = review_agent.chat(
+                    "Your assessment submission is incomplete. Submit assessments "
+                    "for these remaining rule IDs before finishing: "
+                    + ", ".join(remaining_rule_ids)
+                )
+                remaining_rule_ids = assessment_collector.remaining_rule_ids
+            if remaining_rule_ids:
+                stop_reason = (
+                    "max_rounds"
+                    if review_result == "(reached maximum tool-call rounds)"
+                    else "model_response"
+                )
+                issues.append(
+                    "Review Agent assessment coverage remained incomplete after "
+                    f"one repair pass: submitted "
+                    f"{len(assessment_collector.assessments)}/{len(rules)}; "
+                    "remaining rule IDs: "
+                    + ", ".join(remaining_rule_ids)
+                    + f"; stop_reason={stop_reason}."
+                )
         elif contracts.spans:
             if compiled_rules:
                 issues.append("No compiled repository rules apply to the current changes.")
