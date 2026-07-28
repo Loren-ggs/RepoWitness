@@ -60,21 +60,42 @@ RepoWitness 关注的是传统 CI 很难直接表达的**文字契约**：
 
 ### 方式一：GitHub Actions（推荐）
 
-#### 1. 配置 API Key
+#### 1. 配置模型凭据
 
 在目标仓库打开：
 
 `Settings → Secrets and variables → Actions → New repository secret`
 
-创建：
+所有模型服务都先创建同一个 Secret：
 
 ```text
 Name:  REPOWITNESS_API_KEY
 Value: 你的 OpenAI 或 OpenAI-compatible API Key
 ```
 
-Secret 不会写进 workflow、日志或报告。默认模型为 `gpt-5.5`；如使用其他
-OpenAI-compatible 服务，可在本地通过环境变量设置模型和 Base URL。
+GitHub 会对日志中的已注册 Secret 值进行掩码；RepoWitness 不会把 API Key
+写入 workflow 或审核报告。不要把 Key 放在 GitHub Variables、`.env` 提交
+记录或 workflow 明文中。
+
+**使用默认 OpenAI 配置时，到这里就完成了。** RepoWitness 默认使用
+`gpt-5.5` 和 OpenAI API 地址。
+
+**使用 DeepSeek 等 OpenAI-compatible 服务时，只配置 Key 不够。** API Key
+本身不包含服务地址和模型信息，RepoWitness 无法据此自动判断应该路由到
+DeepSeek。还需要打开：
+
+`Settings → Secrets and variables → Actions → Variables → New repository variable`
+
+创建两个非敏感变量。以下示例与本项目本地 DeepSeek 配置一致：
+
+```text
+REPOWITNESS_MODEL = deepseek-v4-flash
+REPOWITNESS_BASE_URL = https://api.deepseek.com
+```
+
+模型名称和 Base URL 请以实际服务商提供的值为准。DeepSeek 使用
+OpenAI-compatible 协议时，`REPOWITNESS_PROVIDER` 保持默认的 `openai`
+即可，无需额外配置。
 
 #### 2. 添加完整 workflow
 
@@ -96,6 +117,17 @@ jobs:
     secrets:
       api_key: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
+
+可复用 workflow 会自动把调用仓库中的 Variables 注入为：
+
+```yaml
+env:
+  REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
+  REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
+```
+
+未创建这两个 Variables 时，它们是空字符串，RepoWitness 会继续使用默认
+OpenAI 配置；创建后则按指定的 OpenAI-compatible 模型和地址调用。
 
 提交后，新建或更新 PR 即会自动：
 
@@ -127,6 +159,9 @@ jobs:
           fetch-depth: 0
 
       - uses: Loren-ggs/RepoWitness@v0.3.0
+        env:
+          REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
+          REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
         with:
           api-key: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
