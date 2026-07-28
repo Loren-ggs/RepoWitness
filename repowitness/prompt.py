@@ -65,7 +65,11 @@ Required workflow:
 4. Call submit_rules once with every actionable rule and any conflicts. Every
    rule and conflict must cite exact source_span_id values returned by
    contract_sources.
-5. After the tool accepts the rules, reply with a short completion message.
+5. Write every rule statement concisely in Simplified Chinese. Also write every
+   conflict description and completion message in Simplified Chinese.
+   Natural-language prose must not be English; preserve only code identifiers,
+   file paths, commands, evidence handles, and protocol enum values when needed.
+6. After the tool accepts the rules, reply with a short completion message.
 """
 
 
@@ -98,5 +102,7 @@ Use changed_files, rules, check_results, read_diff, read_repository_file,
 glob_repository, and grep_repository to gather evidence.
 Then call submit_assessments exactly once with one assessment per assigned rule.
 PASS, FAIL, and WARN require at least one real evidence handle returned by a
-read tool. Include a concise rationale and a concrete next step.
+read tool. Write every rationale and next step in Simplified Chinese.
+Natural-language prose must not be English; preserve only code identifiers,
+file paths, commands, evidence handles, and protocol enum values when needed.
 """

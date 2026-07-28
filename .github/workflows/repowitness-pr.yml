@@ -105,15 +105,12 @@ jobs:
         id: repowitness
         uses: ./
         with:
-          base: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          api-key: ${{ secrets.REPOWITNESS_API_KEY }}
           contracts-ref: base
           output: repowitness-report.md
           check-results: ${{ steps.check-evidence.outputs.path }}
           fail-on: fail
-          comment: true
-          github-token: ${{ github.token }}
         env:
-          REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
           REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
           REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
 

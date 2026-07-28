@@ -228,7 +228,7 @@ def render_markdown(report: AuditReport) -> str:
             [
                 f"### {assessment['verdict']} · {rule['rule_id']}",
                 "",
-                f"> {rule['quote']}",
+                f"> {rule['statement']}",
                 "",
                 f"- 规则来源：`{location}`（{source['revision']}）",
                 f"- 判断依据：{assessment['rationale']}",

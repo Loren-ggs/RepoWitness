@@ -31,7 +31,8 @@ RepoWitness 综合以下输入：
 - `WARN`：存在具体风险，但不足以判定失败；
 - `UNVERIFIED`：缺少必要证据或当前能力无法验证。
 
-每条结论都包含规则原文与来源、证据 handle、判断依据和下一步建议。
+每条结论都包含中文规则表述与原文来源、证据 handle、判断依据和下一步建议；
+canonical JSON 同时保留规范原文。
 
 ## 只读是能力边界
 
@@ -72,6 +73,22 @@ RepoWitness 审查 Agent。
 
 ## 安装
 
+普通使用直接从 PyPI 安装：
+
+```bash
+python -m pip install repowitness
+export REPOWITNESS_API_KEY=sk-...
+```
+
+然后进入任意目标仓库即可审查：
+
+```bash
+cd /path/to/repository
+repowitness audit --base main
+```
+
+只有参与 RepoWitness 开发时才需要克隆源码：
+
 ```bash
 git clone https://github.com/Loren-ggs/RepoWitness.git
 cd RepoWitness
@@ -79,10 +96,9 @@ python -m venv .venv
 ./.venv/bin/pip install -e ".[dev]"
 ```
 
-配置一个 OpenAI 兼容模型：
+默认模型之外的 OpenAI 兼容模型可以额外配置：
 
 ```bash
-export REPOWITNESS_API_KEY=sk-...
 export REPOWITNESS_MODEL=gpt-5.5
 
 # 可选的自定义模型地址
@@ -202,27 +218,49 @@ snapshot 会导致原生结果被拒绝导入。
 
 ## GitHub Actions
 
-调用仓库中的 composite Action；checkout 必须保留 base 历史：
+最简接入使用可复用 workflow。目标仓库只需创建
+`REPOWITNESS_API_KEY` Secret，并添加：
 
 ```yaml
+name: RepoWitness
+
+on:
+  pull_request:
+
 permissions:
   contents: read
   pull-requests: write
 
+jobs:
+  audit:
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness-reusable.yml@v0
+    secrets:
+      api_key: ${{ secrets.REPOWITNESS_API_KEY }}
+```
+
+该 workflow 自动 checkout 全历史、选择 PR base SHA、运行审查、写入 Job
+Summary、创建或更新 PR 评论，并上传 `repowitness-report` artifact。由手动
+workflow 调用时自动使用仓库默认分支。PR 评论默认开启；传入
+`comment: false` 可以关闭。
+
+需要导入自定义检查结果时，可直接调用 composite Action：
+
+```yaml
 steps:
   - uses: actions/checkout@v6
     with:
       fetch-depth: 0
-  - uses: Loren-ggs/RepoWitness@v0.3.0
+  - uses: Loren-ggs/RepoWitness@v0
     with:
-      base: ${{ github.event.pull_request.base.sha }}
+      api-key: ${{ secrets.REPOWITNESS_API_KEY }}
       check-results: ${{ runner.temp }}/repowitness-check-results.json
       fail-on: fail
-      comment: true
-      github-token: ${{ github.token }}
-    env:
-      REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
+
+`base`、`comment` 和 `github-token` 都可省略：Action 会自动选择 PR base SHA
+或默认分支，默认更新 PR 评论，并使用当前 `github.token`。旧的
+`REPOWITNESS_API_KEY` 环境变量调用方式继续兼容。评论需要 workflow 授予
+`pull-requests: write`。
 
 确定性检查执行前先记录 `repowitness snapshot`，检查完成后把结果写成上述标准
 JSON。`check-results` 也支持一行一个路径的多文件输入。Snapshot 不匹配时，
@@ -231,9 +269,7 @@ JSON。`check-results` 也支持一行一个路径的多文件输入。Snapshot 
 `compileall` 的完整采集示例：即使检查失败也保留结果作为证据，同时审查仍
 保持 advisory。
 
-报告写入 GitHub Job Summary。`comment: true` 会创建或更新同一条带固定标记
-的 PR 评论；workflow 必须授予 `pull-requests: write` 并传入
-`github-token`。评论过长时会截断，完整报告仍保存在 artifact。
+报告写入 GitHub Job Summary。评论过长时会截断，完整报告仍保存在 artifact。
 
 默认仍是建议模式：即使报告包含 `FAIL`，只要审查完整执行，退出码仍为 `0`。
 可重复传入 `--fail-on fail|warn|unverified`，或使用 Action 的多行

@@ -26,7 +26,7 @@ def _report():
     rule = Rule(
         rule_id="RW-ABC123",
         source_span_id=span.span_id,
-        statement=span.text,
+        statement="公共 API 必须保持兼容。",
         applies_to=("**/*.py",),
     )
     evidence = Evidence(
@@ -40,8 +40,8 @@ def _report():
         rule_id=rule.rule_id,
         verdict="FAIL",
         evidence_handles=(evidence.handle,),
-        rationale="The public function was renamed.",
-        next_step="Restore a compatibility wrapper.",
+        rationale="公共函数已被重命名。",
+        next_step="恢复兼容包装函数。",
     )
     return AuditReport(
         base_revision="base-sha",
@@ -102,7 +102,10 @@ def test_json_is_canonical_and_markdown_is_rendered_from_the_same_report():
     assert "Documentation changes require review." in markdown
     assert "FAIL" in markdown
     assert "AGENTS.md:3" in markdown
-    assert "Restore a compatibility wrapper." in markdown
+    assert "公共 API 必须保持兼容。" in markdown
+    assert "公共函数已被重命名。" in markdown
+    assert "恢复兼容包装函数。" in markdown
+    assert "Public APIs must stay compatible." not in markdown
 
 
 def test_worktree_contract_change_notice_names_the_selected_revision():

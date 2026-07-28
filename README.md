@@ -28,8 +28,9 @@ Every evaluated rule receives one verdict:
 - `WARN`: a concrete risk exists but evidence is insufficient for failure;
 - `UNVERIFIED`: required evidence or capability is unavailable.
 
-Every assessment includes the exact rule quote and source location, evidence
-handles, rationale, and a next step.
+Every assessment includes a Chinese rule statement, the original source
+location, evidence handles, rationale, and a next step. Canonical JSON also
+retains the exact source quote.
 
 ## Read-only by capability
 
@@ -70,6 +71,22 @@ Version `0.3.0` currently supports:
 
 ## Install
 
+Install the published CLI from PyPI:
+
+```bash
+python -m pip install repowitness
+export REPOWITNESS_API_KEY=sk-...
+```
+
+Then audit any target repository:
+
+```bash
+cd /path/to/repository
+repowitness audit --base main
+```
+
+Clone the source only when developing RepoWitness itself:
+
 ```bash
 git clone https://github.com/Loren-ggs/RepoWitness.git
 cd RepoWitness
@@ -77,10 +94,9 @@ python -m venv .venv
 ./.venv/bin/pip install -e ".[dev]"
 ```
 
-Configure an OpenAI-compatible model:
+Configure another OpenAI-compatible model only when needed:
 
 ```bash
-export REPOWITNESS_API_KEY=sk-...
 export REPOWITNESS_MODEL=gpt-5.5
 
 # Optional custom endpoint
@@ -195,27 +211,50 @@ The standard result envelope is:
 
 ## GitHub Actions
 
-Use the composite action after a full-history checkout:
+For the shortest setup, create a `REPOWITNESS_API_KEY` repository Secret and
+call the reusable workflow:
 
 ```yaml
+name: RepoWitness
+
+on:
+  pull_request:
+
 permissions:
   contents: read
   pull-requests: write
 
+jobs:
+  audit:
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness-reusable.yml@v0
+    secrets:
+      api_key: ${{ secrets.REPOWITNESS_API_KEY }}
+```
+
+The workflow checks out full history, selects the PR base SHA, runs the audit,
+writes the Job Summary, creates or updates the PR comment, and uploads the
+`repowitness-report` artifact. Calls triggered by a manual caller use the
+repository default branch. PR comments default on; pass `comment: false` to
+disable them.
+
+Call the composite Action directly when importing custom check results:
+
+```yaml
 steps:
   - uses: actions/checkout@v6
     with:
       fetch-depth: 0
-  - uses: Loren-ggs/RepoWitness@v0.3.0
+  - uses: Loren-ggs/RepoWitness@v0
     with:
-      base: ${{ github.event.pull_request.base.sha }}
+      api-key: ${{ secrets.REPOWITNESS_API_KEY }}
       check-results: ${{ runner.temp }}/repowitness-check-results.json
       fail-on: fail
-      comment: true
-      github-token: ${{ github.token }}
-    env:
-      REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
+
+`base`, `comment`, and `github-token` are optional. The Action selects the PR
+base SHA or default branch, updates the PR comment by default, and uses the
+current `github.token`. Existing `REPOWITNESS_API_KEY` environment-variable
+calls remain supported. Commenting requires `pull-requests: write`.
 
 Generate the standard JSON after running deterministic checks and bind it to
 the output of `repowitness snapshot` captured before those checks. The
@@ -225,10 +264,8 @@ mismatches are reported and the results are not imported. See
 complete pytest, Ruff, and `compileall` collection example that preserves
 failed checks as evidence while the audit remains advisory.
 
-The Markdown report is appended to the GitHub Job Summary. `comment: true`
-creates or updates one marker-bound PR comment; the workflow must grant
-`pull-requests: write` and pass `github-token`. The full report remains the
-artifact if a comment must be truncated.
+The Markdown report is appended to the GitHub Job Summary. The full report
+remains the artifact if a comment must be truncated.
 
 The default remains advisory: a completed audit returns exit code `0` even
 when the report contains `FAIL`. Use repeatable `--fail-on

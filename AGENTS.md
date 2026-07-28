@@ -23,6 +23,8 @@
 - Model verdicts must cite system-issued rule and evidence identifiers.
 - Validate submitted assessments deterministically and downgrade unsupported `PASS`, `FAIL`, or `WARN` results to `UNVERIFIED`.
 - Canonical JSON is the report source of truth. Render Markdown from the validated report rather than accepting model-generated Markdown.
+- Markdown reports and PR comments must use Simplified Chinese for model-generated natural-language prose; preserve protocol enums, paths, commands, and identifiers. Keep exact contract quotes in canonical JSON for auditability.
+- The public Action must accept an optional `api-key` input with `REPOWITNESS_API_KEY` fallback, infer an omitted base from the PR or default branch, default PR comments on, and fall back to `github.token` for commenting.
 - In GitHub workflows, write generated check-result files under `RUNNER_TEMP`, not inside the checked-out repository, so they cannot appear as repository changes or bypass the validated check-result evidence channel.
 
 ## Verification

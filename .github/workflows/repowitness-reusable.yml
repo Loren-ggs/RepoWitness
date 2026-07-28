@@ -1,0 +1,65 @@
+name: RepoWitness reusable audit
+
+on:
+  workflow_call:
+    inputs:
+      base:
+        description: Optional base Git ref. Defaults to the PR base SHA or default branch.
+        required: false
+        type: string
+        default: ""
+      contracts_ref:
+        description: Contract revision to audit against.
+        required: false
+        type: string
+        default: base
+      comment:
+        description: Create or update the RepoWitness pull request comment.
+        required: false
+        type: boolean
+        default: true
+      fail_on:
+        description: Newline-separated verdicts that should fail the audit.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      api_key:
+        description: Model API key.
+        required: true
+
+jobs:
+  audit:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run RepoWitness
+        id: repowitness
+        uses: Loren-ggs/RepoWitness@v0
+        with:
+          api-key: ${{ secrets.api_key }}
+          base: ${{ inputs.base }}
+          contracts-ref: ${{ inputs.contracts_ref }}
+          comment: ${{ inputs.comment }}
+          fail-on: ${{ inputs.fail_on }}
+
+      - name: Upload audit report
+        if: ${{ always() && steps.repowitness.outputs.report != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: repowitness-report
+          path: ${{ steps.repowitness.outputs.report }}
+          if-no-files-found: error
+          retention-days: 14

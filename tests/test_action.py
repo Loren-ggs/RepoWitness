@@ -21,6 +21,73 @@ def test_composite_action_runs_the_shared_cli_with_opt_in_fail_on():
     assert 'echo "exit-code=${audit_status}" >> "${GITHUB_OUTPUT}"' in action
 
 
+def test_composite_action_defaults_marketplace_inputs_safely():
+    action_path = Path(__file__).parents[1] / "action.yml"
+    action = yaml.safe_load(action_path.read_text(encoding="utf-8"))
+    source = action_path.read_text(encoding="utf-8")
+
+    assert action["inputs"]["base"] == {
+        "description": (
+            "Optional base Git ref. Defaults to the PR base SHA or "
+            "repository default branch."
+        ),
+        "required": False,
+        "default": "",
+    }
+    assert action["inputs"]["api-key"]["default"] == ""
+    assert action["inputs"]["comment"]["default"] == "true"
+    assert "REPOWITNESS_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}" in source
+    assert "REPOWITNESS_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}" in source
+    assert 'base_ref="${REPOWITNESS_ACTION_BASE:-${REPOWITNESS_EVENT_BASE_SHA:-${REPOWITNESS_DEFAULT_BRANCH}}}"' in source
+    assert 'export REPOWITNESS_API_KEY="${REPOWITNESS_ACTION_API_KEY}"' in source
+    assert '--base "${base_ref}"' in source
+
+
+def test_composite_action_base_fallback_priority():
+    action = (Path(__file__).parents[1] / "action.yml").read_text()
+    assignment = next(
+        line.strip()
+        for line in action.splitlines()
+        if line.strip().startswith('base_ref="')
+    )
+    cases = (
+        (
+            {
+                "REPOWITNESS_ACTION_BASE": "explicit",
+                "REPOWITNESS_EVENT_BASE_SHA": "pr-sha",
+                "REPOWITNESS_DEFAULT_BRANCH": "main",
+            },
+            "explicit",
+        ),
+        (
+            {
+                "REPOWITNESS_ACTION_BASE": "",
+                "REPOWITNESS_EVENT_BASE_SHA": "pr-sha",
+                "REPOWITNESS_DEFAULT_BRANCH": "main",
+            },
+            "pr-sha",
+        ),
+        (
+            {
+                "REPOWITNESS_ACTION_BASE": "",
+                "REPOWITNESS_EVENT_BASE_SHA": "",
+                "REPOWITNESS_DEFAULT_BRANCH": "main",
+            },
+            "main",
+        ),
+    )
+
+    for environment, expected in cases:
+        completed = subprocess.run(
+            ["bash", "-c", f"{assignment}\nprintf '%s' \"${{base_ref}}\""],
+            env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.stdout == expected
+
+
 def test_composite_action_manifest_and_shell_are_parseable():
     action = yaml.safe_load(
         (Path(__file__).parents[1] / "action.yml").read_text(encoding="utf-8")
@@ -65,6 +132,7 @@ def test_composite_action_updates_a_marker_bound_pr_comment():
     assert "comment:" in action
     assert "github-token:" in action
     assert "inputs.comment == 'true'" in action
+    assert "inputs.github-token || github.token" in action
     assert "<!-- repowitness-report -->" in action
     assert "REPOWITNESS_PR_NUMBER: ${{ github.event.pull_request.number }}" in action
     assert "issues/${REPOWITNESS_PR_NUMBER}/comments" in action
@@ -85,9 +153,9 @@ def test_pr_workflow_runs_the_local_action_and_uploads_its_report():
     assert "fetch-depth: 0" in workflow
     assert "uses: ./" in workflow
     assert "contracts-ref: base" in workflow
+    assert "api-key: ${{ secrets.REPOWITNESS_API_KEY }}" in workflow
     assert "github.event.pull_request.head.repo.full_name == github.repository" in workflow
     assert "pull-requests: write" in workflow
-    assert "comment: true" in workflow
     assert "fail-on: fail" in workflow
     assert "actions/upload-artifact@v7" in workflow
     assert "steps.repowitness.outputs.report" in workflow
@@ -116,3 +184,26 @@ def test_pr_workflow_collects_snapshot_bound_deterministic_checks():
     assert workflow.index("python -m compileall -q repowitness tests") < workflow.index(
         "uses: ./"
     )
+
+
+def test_reusable_workflow_wraps_checkout_audit_comment_and_artifact():
+    workflow = (
+        Path(__file__).parents[1]
+        / ".github"
+        / "workflows"
+        / "repowitness-reusable.yml"
+    ).read_text()
+
+    assert "workflow_call:" in workflow
+    assert "api_key:" in workflow
+    assert "required: true" in workflow
+    assert "default: true" in workflow
+    assert "pull-requests: write" in workflow
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in workflow
+    assert "actions/checkout@v6" in workflow
+    assert "fetch-depth: 0" in workflow
+    assert "uses: Loren-ggs/RepoWitness@v0" in workflow
+    assert "api-key: ${{ secrets.api_key }}" in workflow
+    assert "comment: ${{ inputs.comment }}" in workflow
+    assert "actions/upload-artifact@v7" in workflow
+    assert "steps.repowitness.outputs.report" in workflow

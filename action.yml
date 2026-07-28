@@ -2,8 +2,13 @@ name: RepoWitness audit
 description: Evidence-backed review against your repository's own rules.
 inputs:
   base:
-    description: Base Git ref or commit SHA used for the diff.
-    required: true
+    description: Optional base Git ref. Defaults to the PR base SHA or repository default branch.
+    required: false
+    default: ""
+  api-key:
+    description: Model API key. Defaults to the REPOWITNESS_API_KEY environment variable.
+    required: false
+    default: ""
   contracts-ref:
     description: "Contract revision: base, head, or worktree."
     required: false
@@ -39,9 +44,9 @@ inputs:
   comment:
     description: Create or update the RepoWitness pull request comment.
     required: false
-    default: "false"
+    default: "true"
   github-token:
-    description: GitHub token used only when comment is true.
+    description: GitHub token used only when comment is true. Defaults to github.token.
     required: false
     default: ""
 outputs:
@@ -66,6 +71,9 @@ runs:
       shell: bash
       env:
         REPOWITNESS_ACTION_BASE: ${{ inputs.base }}
+        REPOWITNESS_ACTION_API_KEY: ${{ inputs.api-key }}
+        REPOWITNESS_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        REPOWITNESS_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         REPOWITNESS_ACTION_CONTRACTS_REF: ${{ inputs.contracts-ref }}
         REPOWITNESS_ACTION_OUTPUT: ${{ inputs.output }}
         REPOWITNESS_ACTION_CHECK_RESULTS: ${{ inputs.check-results }}
@@ -74,6 +82,14 @@ runs:
         REPOWITNESS_ACTION_EVIDENCE_SNAPSHOT: ${{ inputs.evidence-snapshot }}
         REPOWITNESS_ACTION_FAIL_ON: ${{ inputs.fail-on }}
       run: |
+        base_ref="${REPOWITNESS_ACTION_BASE:-${REPOWITNESS_EVENT_BASE_SHA:-${REPOWITNESS_DEFAULT_BRANCH}}}"
+        if [[ -z "${base_ref}" ]]; then
+          echo "RepoWitness 无法确定基准版本；请显式传入 base。" >&2
+          exit 1
+        fi
+        if [[ -n "${REPOWITNESS_ACTION_API_KEY}" ]]; then
+          export REPOWITNESS_API_KEY="${REPOWITNESS_ACTION_API_KEY}"
+        fi
         report_path="${GITHUB_WORKSPACE}/${REPOWITNESS_ACTION_OUTPUT}"
         check_result_args=()
         while IFS= read -r check_result_path; do
@@ -106,7 +122,7 @@ runs:
         set +e
         repowitness audit \
           --repository "${GITHUB_WORKSPACE}" \
-          --base "${REPOWITNESS_ACTION_BASE}" \
+          --base "${base_ref}" \
           --contracts-ref "${REPOWITNESS_ACTION_CONTRACTS_REF}" \
           "${check_result_args[@]}" \
           "${native_result_args[@]}" \
@@ -125,7 +141,7 @@ runs:
       if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' && steps.audit.outputs.report != '' }}
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ inputs.github-token || github.token }}
         REPOWITNESS_REPORT: ${{ steps.audit.outputs.report }}
         REPOWITNESS_PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
@@ -140,7 +156,7 @@ runs:
         if len(encoded) > 65_000:
             body = (
                 encoded[:62_000].decode("utf-8", errors="ignore")
-                + "\n\n_Report truncated; download the full artifact._\n"
+                + "\n\n_评论内容已截断，请下载完整报告产物。_\n"
             )
         Path(sys.argv[2]).write_text(body, encoding="utf-8")
         PY

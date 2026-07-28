@@ -84,3 +84,10 @@ def test_repowitness_environment_variables_configure_the_model(monkeypatch):
     assert config.model == "review-model"
     assert config.api_key == "review-key"
     assert config.base_url == "https://models.example/v1"
+
+
+def test_audit_prompts_require_simplified_chinese_report_content():
+    from repowitness.prompt import contract_compiler_prompt, review_prompt
+
+    assert "Simplified Chinese" in contract_compiler_prompt()
+    assert "Simplified Chinese" in review_prompt(())
