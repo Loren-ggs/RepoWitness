@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🧾 RepoWitness（仓证）</h1>
+  <h1>🧾 RepoWitness</h1>
   <p><strong>让每一次代码变更，都对仓库自己写下的规则负责。</strong></p>
   <p>
     RepoWitness 会读取项目文档中的明确要求，结合本次 Git diff 和可验证证据，
