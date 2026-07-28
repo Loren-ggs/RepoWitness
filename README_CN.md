@@ -233,7 +233,7 @@ permissions:
 
 jobs:
   audit:
-    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness-reusable.yml@v0
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0
     secrets:
       api_key: ${{ secrets.REPOWITNESS_API_KEY }}
 ```

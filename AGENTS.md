@@ -9,6 +9,7 @@
 - Treat model-submitted `applies_to` values only as optional repository-relative globs supported by the cited contract. If they match no known repository path, fall back to the deterministic source scope and report the reason instead of silently dropping the rule.
 - Advisory mode is the default. A completed audit may report `FAIL` without returning a failing process exit code.
 - Consume deterministic test, lint, pre-commit, or SARIF evidence; do not execute repository commands from the review agent.
+- Keep the external reusable workflow consumer-facing name and path concise: `RepoWitness` at `.github/workflows/repowitness.yml`.
 
 ## CoreCoder inheritance
 

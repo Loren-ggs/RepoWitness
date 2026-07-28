@@ -1,4 +1,4 @@
-name: RepoWitness reusable audit
+name: RepoWitness
 
 on:
   workflow_call:

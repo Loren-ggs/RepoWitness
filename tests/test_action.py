@@ -197,14 +197,15 @@ def test_pr_workflow_collects_snapshot_bound_deterministic_checks():
     )
 
 
-def test_reusable_workflow_wraps_checkout_audit_comment_and_artifact():
+def test_repowitness_workflow_wraps_checkout_audit_comment_and_artifact():
     workflow = (
         Path(__file__).parents[1]
         / ".github"
         / "workflows"
-        / "repowitness-reusable.yml"
+        / "repowitness.yml"
     ).read_text(encoding="utf-8")
 
+    assert workflow.startswith("name: RepoWitness\n")
     assert "workflow_call:" in workflow
     assert "api_key:" in workflow
     assert "required: true" in workflow
