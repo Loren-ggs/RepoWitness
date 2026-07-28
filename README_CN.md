@@ -152,7 +152,17 @@ repowitness audit \
     {
       "name": "pytest",
       "status": "pass",
-      "summary": "106 tests passed"
+      "summary": "全部测试通过"
+    },
+    {
+      "name": "ruff",
+      "status": "pass",
+      "summary": "Ruff 执行成功"
+    },
+    {
+      "name": "compileall",
+      "status": "pass",
+      "summary": "Python 源码编译成功"
     }
   ]
 }
@@ -170,9 +180,17 @@ steps:
   - uses: Loren-ggs/RepoWitness@v0.2.0
     with:
       base: ${{ github.event.pull_request.base.sha }}
+      check-results: ${{ runner.temp }}/repowitness-check-results.json
     env:
       REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
+
+确定性检查执行前先记录 `repowitness snapshot`，检查完成后把结果写成上述标准
+JSON。`check-results` 也支持一行一个路径的多文件输入。Snapshot 不匹配时，
+结果会被拒绝导入并写入报告问题列表。仓库自身的
+[PR workflow](.github/workflows/repowitness-pr.yml) 提供了 pytest、Ruff 和
+`compileall` 的完整采集示例：即使检查失败也保留结果作为证据，同时审查仍
+保持 advisory。
 
 报告写入 GitHub Job Summary。当前仍是建议模式，不会因为审查结论为 `FAIL`
 而阻止合并。
@@ -195,7 +213,7 @@ report = AuditEngine(llm).audit(
 )
 ```
 
-CLI 与未来的 GitHub Actions 都调用同一个 `AuditEngine`。
+CLI 与 composite GitHub Action 都调用同一个 `AuditEngine`。
 
 项目继续复用 CoreCoder 的 Agent loop、provider、Tool 协议、并行执行、
 中断回填和上下文压缩；RepoWitness 在外层增加 Git 快照、契约、证据、

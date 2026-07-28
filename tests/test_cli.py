@@ -64,6 +64,32 @@ def test_audit_cli_accepts_explicit_worktree_contracts(tmp_path):
     assert engine.request.contracts_ref == "worktree"
 
 
+def test_audit_cli_preserves_repeated_check_result_paths(tmp_path):
+    engine = _FakeEngine()
+    first = tmp_path / "pytest.json"
+    second = tmp_path / "ruff.json"
+
+    exit_code = main(
+        [
+            "audit",
+            "--base",
+            "main",
+            "--repository",
+            str(tmp_path),
+            "--check-results",
+            str(first),
+            "--check-results",
+            str(second),
+        ],
+        engine=engine,
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert exit_code == 0
+    assert engine.request.check_result_paths == (first, second)
+
+
 def test_snapshot_cli_does_not_require_an_llm(tmp_path):
     subprocess.run(
         ["git", "init", "-q"],
