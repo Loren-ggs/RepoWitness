@@ -45,11 +45,11 @@ The audit does not:
 - block a pull request unless the caller explicitly enables `--fail-on`.
 
 Inherited CoreCoder implementations remain in the source tree for future
-explicit use, but they are not registered in RepoWitness audit agents.
+explicit use, but they are not registered in RepoWitness review agents.
 
 ## Current capabilities
 
-Version `0.3.0` currently supports:
+Version `0.3.1` currently supports:
 
 - `repowitness audit --base <ref>`;
 - base contracts by default, with explicit `head` and `worktree` bootstrap modes;
@@ -225,11 +225,17 @@ permissions:
   pull-requests: write
 
 jobs:
-  audit:
-    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.3.0
+  repowitness:
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.3.1
+    with:
+      fail_on: fail
     secrets:
       api_key: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
+
+This recommended configuration turns the `repowitness / repowitness` check
+red when the report contains `FAIL`. Add that check as a required status check
+in the target branch ruleset when it must block merging.
 
 The Secret alone is sufficient for the default OpenAI configuration. An API
 key cannot identify or route to another OpenAI-compatible service by itself.
@@ -259,7 +265,7 @@ steps:
   - uses: actions/checkout@v6
     with:
       fetch-depth: 0
-  - uses: Loren-ggs/RepoWitness@v0.3.0
+  - uses: Loren-ggs/RepoWitness@v0.3.1
     env:
       REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
       REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
@@ -285,13 +291,18 @@ failed checks as evidence while the audit remains advisory.
 The Markdown report is appended to the GitHub Job Summary. The full report
 remains the artifact if a comment must be truncated.
 
-The default remains advisory: a completed audit returns exit code `0` even
-when the report contains `FAIL`. Use repeatable `--fail-on
-fail|warn|unverified`, or the Action's newline-separated `fail-on` input, to
-return non-zero for selected verdicts. Configure the resulting workflow job as
-a required status check in GitHub branch protection when it should block
-merges. Repository, configuration, model, or report generation errors are
-always non-zero.
+The CLI and Action metadata remain advisory by default for backward
+compatibility, while the recommended PR workflow above opts into
+`fail_on: fail`. Use repeatable `--fail-on fail|warn|unverified`, or the
+Action's newline-separated `fail-on` input, to return non-zero for selected
+verdicts. Configure `repowitness / repowitness` as a required status check when
+it should block merges. Repository, configuration, model, or report generation
+errors are always non-zero.
+
+After changing a caller workflow, do not only re-run an old workflow run. The
+old run continues to use the workflow from its original base commit. Update the
+PR branch, reopen the PR, or create a new PR, then verify that the new run lists
+`fail_on: fail` in its Inputs.
 
 ## Architecture
 

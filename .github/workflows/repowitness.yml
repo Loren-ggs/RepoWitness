@@ -29,7 +29,7 @@ on:
         required: true
 
 jobs:
-  audit:
+  repowitness:
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
@@ -47,7 +47,7 @@ jobs:
 
       - name: Run RepoWitness
         id: repowitness
-        uses: Loren-ggs/RepoWitness@v0.3.0
+        uses: Loren-ggs/RepoWitness@v0.3.1
         env:
           REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
           REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
@@ -58,7 +58,7 @@ jobs:
           comment: ${{ inputs.comment }}
           fail-on: ${{ inputs.fail_on }}
 
-      - name: Upload audit report
+      - name: Upload RepoWitness report
         if: ${{ always() && steps.repowitness.outputs.report != '' }}
         uses: actions/upload-artifact@v7
         with:
