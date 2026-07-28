@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from .agent import Agent
-from .check_results import import_check_results, repository_result_paths
+from .check_results import (
+    import_check_results,
+    import_native_results,
+    repository_result_paths,
+)
 from .collectors import AssessmentCollector, RuleCollector
 from .contracts import ContractCatalog, is_contract_path
 from .domain import AuditReport, AuditRequest
@@ -74,12 +78,29 @@ class AuditEngine:
         rules = selection.applicable_rules
         issues.extend(selection.notices)
         evidence = EvidenceStore()
+        result_paths = (
+            request.check_result_paths
+            + request.junit_paths
+            + request.sarif_paths
+        )
         issues.extend(
             import_check_results(
                 request.check_result_paths,
                 repository,
                 evidence,
                 include_untracked=request.include_untracked,
+                result_paths=result_paths,
+            )
+        )
+        issues.extend(
+            import_native_results(
+                junit_paths=request.junit_paths,
+                sarif_paths=request.sarif_paths,
+                evidence_snapshot=request.evidence_snapshot,
+                repository=repository,
+                evidence=evidence,
+                include_untracked=request.include_untracked,
+                result_paths=result_paths,
             )
         )
         assessment_collector = AssessmentCollector(rules)
@@ -115,7 +136,7 @@ class AuditEngine:
             snapshot=repository.snapshot_identity(
                 include_untracked=request.include_untracked,
                 exclude_paths=repository_result_paths(
-                    request.check_result_paths,
+                    result_paths,
                     repository,
                 ),
             ),

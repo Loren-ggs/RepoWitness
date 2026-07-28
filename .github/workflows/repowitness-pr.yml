@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   audit:
@@ -108,6 +109,9 @@ jobs:
           contracts-ref: base
           output: repowitness-report.md
           check-results: ${{ steps.check-evidence.outputs.path }}
+          fail-on: fail
+          comment: true
+          github-token: ${{ github.token }}
         env:
           REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
           REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}

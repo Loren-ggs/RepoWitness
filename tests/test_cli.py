@@ -90,6 +90,63 @@ def test_audit_cli_preserves_repeated_check_result_paths(tmp_path):
     assert engine.request.check_result_paths == (first, second)
 
 
+def test_audit_cli_loads_repository_yaml_and_cli_overrides_it(tmp_path):
+    engine = _FakeEngine()
+    checks = tmp_path / "checks.json"
+    (tmp_path / ".repowitness.yml").write_text(
+        """
+version: 1
+audit:
+  base: origin/main
+  contracts-ref: head
+  format: json
+  include-untracked: false
+  check-results:
+    - checks.json
+  fail-on:
+    - fail
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "audit",
+            "--repository",
+            str(tmp_path),
+            "--contracts-ref",
+            "base",
+        ],
+        engine=engine,
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert exit_code == 1
+    assert engine.request.base_ref == "origin/main"
+    assert engine.request.contracts_ref == "base"
+    assert engine.request.include_untracked is False
+    assert engine.request.check_result_paths == (checks,)
+
+
+def test_audit_cli_rejects_unknown_yaml_options(tmp_path):
+    (tmp_path / ".repowitness.yml").write_text(
+        "version: 1\naudit:\n  base: main\n  execute-tests: true\n",
+        encoding="utf-8",
+    )
+    stderr = io.StringIO()
+
+    exit_code = main(
+        ["audit", "--repository", str(tmp_path)],
+        engine=_FakeEngine(),
+        stdout=io.StringIO(),
+        stderr=stderr,
+    )
+
+    assert exit_code == 1
+    assert "unknown audit option: execute-tests" in stderr.getvalue()
+
+
 def test_snapshot_cli_does_not_require_an_llm(tmp_path):
     subprocess.run(
         ["git", "init", "-q"],

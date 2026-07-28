@@ -41,14 +41,14 @@ The audit does not:
 - modify, stage, commit, or push repository files;
 - execute tests, linters, pre-commit, or arbitrary commands;
 - generate automatic fixes;
-- block a pull request in the current advisory release.
+- block a pull request unless the caller explicitly enables `--fail-on`.
 
 Inherited CoreCoder implementations remain in the source tree for future
 explicit use, but they are not registered in RepoWitness audit agents.
 
 ## Current capabilities
 
-Version `0.2.0` currently supports:
+Version `0.3.0` currently supports:
 
 - `repowitness audit --base <ref>`;
 - base contracts by default, with explicit `head` and `worktree` bootstrap modes;
@@ -61,15 +61,12 @@ Version `0.2.0` currently supports:
 - a Contract Compiler Agent and a Review Agent using the same reused agent loop;
 - repository-confined diff, read, glob, and grep tools;
 - snapshot-bound standard check-result JSON ingestion;
+- snapshot-bound native JUnit XML and SARIF 2.1.0 ingestion;
+- strict `.repowitness.yml` configuration with CLI overrides;
 - canonical JSON and Markdown reports;
-- a composite GitHub Action that publishes to the Job Summary;
-- advisory exit behavior.
-
-Not implemented yet:
-
-- native JUnit and SARIF parsing (they can be converted to standard check JSON);
-- YAML configuration;
-- required-check or `--fail-on` behavior.
+- a composite GitHub Action that publishes to the Job Summary and can update
+  one marker-bound PR comment;
+- advisory exit behavior by default, with opt-in `--fail-on` enforcement.
 
 ## Install
 
@@ -98,6 +95,26 @@ export REPOWITNESS_PROVIDER=litellm
 ```
 
 ## Use
+
+Repository configuration is discovered at `.repowitness.yml`:
+
+```yaml
+version: 1
+audit:
+  base: main
+  contracts-ref: base
+  format: markdown
+  output: repowitness-report.md
+  include-untracked: true
+  fail-on:
+    - fail
+```
+
+Supported audit keys are `base`, `contracts-ref`, `format`, `output`,
+`include-untracked`, `check-results`, `junit`, `sarif`,
+`evidence-snapshot`, and `fail-on`. Paths in the file are relative to the
+configuration file. Explicit CLI options override the matching YAML values.
+Model credentials remain environment-only.
 
 Markdown to stdout:
 
@@ -134,6 +151,22 @@ repowitness snapshot
 repowitness audit --base main --check-results .repowitness/pytest-result.json
 ```
 
+JUnit and SARIF do not carry RepoWitness provenance themselves. Capture the
+snapshot before running the external tool, then provide it explicitly:
+
+```bash
+snapshot="$(repowitness snapshot)"
+pytest --junitxml junit.xml
+repowitness audit \
+  --base main \
+  --junit junit.xml \
+  --sarif results.sarif \
+  --evidence-snapshot "${snapshot}"
+```
+
+RepoWitness parses the files but still does not execute the test or analyzer.
+Missing or mismatched provenance rejects the native results.
+
 The standard result envelope is:
 
 ```json
@@ -165,14 +198,21 @@ The standard result envelope is:
 Use the composite action after a full-history checkout:
 
 ```yaml
+permissions:
+  contents: read
+  pull-requests: write
+
 steps:
   - uses: actions/checkout@v6
     with:
       fetch-depth: 0
-  - uses: Loren-ggs/RepoWitness@v0.2.0
+  - uses: Loren-ggs/RepoWitness@v0.3.0
     with:
       base: ${{ github.event.pull_request.base.sha }}
       check-results: ${{ runner.temp }}/repowitness-check-results.json
+      fail-on: fail
+      comment: true
+      github-token: ${{ github.token }}
     env:
       REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
@@ -185,12 +225,18 @@ mismatches are reported and the results are not imported. See
 complete pytest, Ruff, and `compileall` collection example that preserves
 failed checks as evidence while the audit remains advisory.
 
-The Markdown report is appended to the GitHub Job Summary. The action remains
-advisory and does not fail the job for a `FAIL` assessment.
+The Markdown report is appended to the GitHub Job Summary. `comment: true`
+creates or updates one marker-bound PR comment; the workflow must grant
+`pull-requests: write` and pass `github-token`. The full report remains the
+artifact if a comment must be truncated.
 
-The current release is advisory. A completed audit returns exit code `0` even
-when the report contains `FAIL`; repository, configuration, model, or report
-generation errors return a non-zero code.
+The default remains advisory: a completed audit returns exit code `0` even
+when the report contains `FAIL`. Use repeatable `--fail-on
+fail|warn|unverified`, or the Action's newline-separated `fail-on` input, to
+return non-zero for selected verdicts. Configure the resulting workflow job as
+a required status check in GitHub branch protection when it should block
+merges. Repository, configuration, model, or report generation errors are
+always non-zero.
 
 ## Architecture
 

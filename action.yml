@@ -1,4 +1,4 @@
-name: RepoWitness advisory audit
+name: RepoWitness audit
 description: Evidence-backed review against your repository's own rules.
 inputs:
   base:
@@ -20,6 +20,30 @@ inputs:
     description: Newline-separated check-result JSON paths to import.
     required: false
     default: ""
+  junit:
+    description: Newline-separated JUnit XML paths to import.
+    required: false
+    default: ""
+  sarif:
+    description: Newline-separated SARIF JSON paths to import.
+    required: false
+    default: ""
+  evidence-snapshot:
+    description: Snapshot captured before generating JUnit or SARIF files.
+    required: false
+    default: ""
+  fail-on:
+    description: Newline-separated verdicts that should fail the action.
+    required: false
+    default: ""
+  comment:
+    description: Create or update the RepoWitness pull request comment.
+    required: false
+    default: "false"
+  github-token:
+    description: GitHub token used only when comment is true.
+    required: false
+    default: ""
 outputs:
   report:
     description: Absolute path to the generated Markdown report.
@@ -37,7 +61,7 @@ runs:
       shell: bash
       run: python -m pip install "${{ github.action_path }}"
 
-    - name: Run advisory contract audit
+    - name: Run contract audit
       id: audit
       shell: bash
       env:
@@ -45,6 +69,10 @@ runs:
         REPOWITNESS_ACTION_CONTRACTS_REF: ${{ inputs.contracts-ref }}
         REPOWITNESS_ACTION_OUTPUT: ${{ inputs.output }}
         REPOWITNESS_ACTION_CHECK_RESULTS: ${{ inputs.check-results }}
+        REPOWITNESS_ACTION_JUNIT: ${{ inputs.junit }}
+        REPOWITNESS_ACTION_SARIF: ${{ inputs.sarif }}
+        REPOWITNESS_ACTION_EVIDENCE_SNAPSHOT: ${{ inputs.evidence-snapshot }}
+        REPOWITNESS_ACTION_FAIL_ON: ${{ inputs.fail-on }}
       run: |
         report_path="${GITHUB_WORKSPACE}/${REPOWITNESS_ACTION_OUTPUT}"
         check_result_args=()
@@ -53,12 +81,88 @@ runs:
             check_result_args+=(--check-results "${check_result_path}")
           fi
         done <<< "${REPOWITNESS_ACTION_CHECK_RESULTS}"
+        native_result_args=()
+        while IFS= read -r junit_path; do
+          if [[ -n "${junit_path}" ]]; then
+            native_result_args+=(--junit "${junit_path}")
+          fi
+        done <<< "${REPOWITNESS_ACTION_JUNIT}"
+        while IFS= read -r sarif_path; do
+          if [[ -n "${sarif_path}" ]]; then
+            native_result_args+=(--sarif "${sarif_path}")
+          fi
+        done <<< "${REPOWITNESS_ACTION_SARIF}"
+        if [[ -n "${REPOWITNESS_ACTION_EVIDENCE_SNAPSHOT}" ]]; then
+          native_result_args+=(
+            --evidence-snapshot "${REPOWITNESS_ACTION_EVIDENCE_SNAPSHOT}"
+          )
+        fi
+        fail_on_args=()
+        while IFS= read -r verdict; do
+          if [[ -n "${verdict}" ]]; then
+            fail_on_args+=(--fail-on "${verdict}")
+          fi
+        done <<< "${REPOWITNESS_ACTION_FAIL_ON}"
+        set +e
         repowitness audit \
           --repository "${GITHUB_WORKSPACE}" \
           --base "${REPOWITNESS_ACTION_BASE}" \
           --contracts-ref "${REPOWITNESS_ACTION_CONTRACTS_REF}" \
           "${check_result_args[@]}" \
+          "${native_result_args[@]}" \
+          "${fail_on_args[@]}" \
           --format markdown \
           --output "${report_path}"
-        cat "${report_path}" >> "${GITHUB_STEP_SUMMARY}"
-        echo "report=${report_path}" >> "${GITHUB_OUTPUT}"
+        audit_status=$?
+        set -e
+        if [[ -f "${report_path}" ]]; then
+          cat "${report_path}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "report=${report_path}" >> "${GITHUB_OUTPUT}"
+        fi
+        echo "exit-code=${audit_status}" >> "${GITHUB_OUTPUT}"
+
+    - name: Create or update pull request comment
+      if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' && steps.audit.outputs.report != '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPOWITNESS_REPORT: ${{ steps.audit.outputs.report }}
+      run: |
+        comment_body="${RUNNER_TEMP}/repowitness-comment.md"
+        python - "${REPOWITNESS_REPORT}" "${comment_body}" <<'PY'
+        import sys
+        from pathlib import Path
+
+        report = Path(sys.argv[1]).read_text(encoding="utf-8")
+        body = "<!-- repowitness-report -->\n\n" + report
+        encoded = body.encode("utf-8")
+        if len(encoded) > 65_000:
+            body = (
+                encoded[:62_000].decode("utf-8", errors="ignore")
+                + "\n\n_Report truncated; download the full artifact._\n"
+            )
+        Path(sys.argv[2]).write_text(body, encoding="utf-8")
+        PY
+        comment_id="$(
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/issues/${GITHUB_EVENT_NUMBER}/comments?per_page=100" \
+            --jq 'map(.[]) | map(select(.body | startswith("<!-- repowitness-report -->"))) | first | .id // empty'
+        )"
+        if [[ -n "${comment_id}" ]]; then
+          jq -Rs '{body: .}' < "${comment_body}" |
+            gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+              --input - >/dev/null
+        else
+          jq -Rs '{body: .}' < "${comment_body}" |
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${GITHUB_EVENT_NUMBER}/comments" \
+              --input - >/dev/null
+        fi
+
+    - name: Enforce configured verdicts
+      if: ${{ always() && steps.audit.outputs.exit-code != '0' }}
+      shell: bash
+      env:
+        REPOWITNESS_EXIT_CODE: ${{ steps.audit.outputs.exit-code }}
+      run: exit "${REPOWITNESS_EXIT_CODE:-1}"

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "repowitness"
-version = "0.2.0"
+version = "0.3.0"
 description = "Evidence-backed review against your repository's own rules."
 readme = "README.md"
 license = "MIT"
@@ -32,6 +32,7 @@ dependencies = [
     "rich>=13.0",
     "prompt_toolkit>=3.0",
     "python-dotenv>=1.0",
+    "PyYAML>=6.0",
 ]
 
 [tool.hatch.build.targets.wheel]

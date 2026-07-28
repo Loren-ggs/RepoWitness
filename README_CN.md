@@ -43,14 +43,14 @@ RepoWitness Agent 必须显式获得工具。正式审查路径不注册 Bash、
 - 修改、暂存、提交或推送仓库文件；
 - 执行测试、Lint、pre-commit 或任意命令；
 - 自动修复问题；
-- 在当前建议模式中阻止 PR 合并。
+- 阻止 PR 合并，除非调用方显式启用 `--fail-on`。
 
 继承自 CoreCoder 的相关工具源码仍然保留，供未来显式扩展，但不会进入
 RepoWitness 审查 Agent。
 
 ## 当前能力
 
-`0.2.0` 当前已经支持：
+`0.3.0` 当前已经支持：
 
 - `repowitness audit --base <ref>`；
 - 默认从 base revision 读取仓库规范，并可显式选择 `head`/`worktree`；
@@ -63,15 +63,12 @@ RepoWitness 审查 Agent。
 - Contract Compiler Agent 与 Review Agent；
 - 受仓库路径约束的 diff、文件读取、glob 和 grep 工具；
 - 导入与 snapshot 严格匹配的标准 check-result JSON；
+- 导入与 snapshot 严格绑定的 JUnit XML 和 SARIF 2.1.0；
+- 严格校验的 `.repowitness.yml` 配置及 CLI 覆盖；
 - canonical JSON 和 Markdown 报告；
-- GitHub composite Action，在 Job Summary 发布 Markdown 报告；
-- advisory 退出语义。
-
-暂未实现：
-
-- JUnit、SARIF 原生解析（当前可转换为标准 check-result JSON）；
-- YAML 配置；
-- Required Check 或 `--fail-on`。
+- GitHub composite Action，在 Job Summary 发布 Markdown 报告，并可更新一条
+  带固定标记的 PR 评论；
+- 默认 advisory、可显式启用 `--fail-on` 的退出语义。
 
 ## 安装
 
@@ -100,6 +97,25 @@ export REPOWITNESS_PROVIDER=litellm
 ```
 
 ## 使用
+
+仓库根目录的 `.repowitness.yml` 会被自动发现：
+
+```yaml
+version: 1
+audit:
+  base: main
+  contracts-ref: base
+  format: markdown
+  output: repowitness-report.md
+  include-untracked: true
+  fail-on:
+    - fail
+```
+
+支持的 audit 配置项包括 `base`、`contracts-ref`、`format`、`output`、
+`include-untracked`、`check-results`、`junit`、`sarif`、
+`evidence-snapshot` 和 `fail-on`。配置文件中的路径相对于配置文件目录；
+显式 CLI 参数覆盖同名 YAML 配置。模型凭据仍只从环境变量读取。
 
 输出 Markdown：
 
@@ -142,6 +158,22 @@ repowitness audit \
   --check-results .repowitness/pytest-result.json
 ```
 
+JUnit 和 SARIF 本身不携带 RepoWitness snapshot。必须先记录 snapshot，再执行
+外部检查并显式传入：
+
+```bash
+snapshot="$(repowitness snapshot)"
+pytest --junitxml junit.xml
+repowitness audit \
+  --base main \
+  --junit junit.xml \
+  --sarif results.sarif \
+  --evidence-snapshot "${snapshot}"
+```
+
+RepoWitness 只解析结果文件，仍不会执行测试或静态分析。缺少或不匹配的
+snapshot 会导致原生结果被拒绝导入。
+
 标准结果文件格式：
 
 ```json
@@ -173,14 +205,21 @@ repowitness audit \
 调用仓库中的 composite Action；checkout 必须保留 base 历史：
 
 ```yaml
+permissions:
+  contents: read
+  pull-requests: write
+
 steps:
   - uses: actions/checkout@v6
     with:
       fetch-depth: 0
-  - uses: Loren-ggs/RepoWitness@v0.2.0
+  - uses: Loren-ggs/RepoWitness@v0.3.0
     with:
       base: ${{ github.event.pull_request.base.sha }}
       check-results: ${{ runner.temp }}/repowitness-check-results.json
+      fail-on: fail
+      comment: true
+      github-token: ${{ github.token }}
     env:
       REPOWITNESS_API_KEY: ${{ secrets.REPOWITNESS_API_KEY }}
 ```
@@ -192,11 +231,15 @@ JSON。`check-results` 也支持一行一个路径的多文件输入。Snapshot 
 `compileall` 的完整采集示例：即使检查失败也保留结果作为证据，同时审查仍
 保持 advisory。
 
-报告写入 GitHub Job Summary。当前仍是建议模式，不会因为审查结论为 `FAIL`
-而阻止合并。
+报告写入 GitHub Job Summary。`comment: true` 会创建或更新同一条带固定标记
+的 PR 评论；workflow 必须授予 `pull-requests: write` 并传入
+`github-token`。评论过长时会截断，完整报告仍保存在 artifact。
 
-当前版本为建议模式。即使报告包含 `FAIL`，只要审查完整执行，退出码仍为
-`0`；仓库、配置、模型或报告生成错误使用非零退出码。
+默认仍是建议模式：即使报告包含 `FAIL`，只要审查完整执行，退出码仍为 `0`。
+可重复传入 `--fail-on fail|warn|unverified`，或使用 Action 的多行
+`fail-on` 输入，让指定结论返回非零。若要阻止合并，再在 GitHub 分支保护中
+把对应 workflow job 设为 Required Check。仓库、配置、模型或报告生成错误
+始终使用非零退出码。
 
 ## 架构
 
