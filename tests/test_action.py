@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 import sys
@@ -8,7 +9,9 @@ import yaml
 
 
 def test_composite_action_runs_the_shared_cli_with_opt_in_fail_on():
-    action = (Path(__file__).parents[1] / "action.yml").read_text()
+    action = (Path(__file__).parents[1] / "action.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "repowitness audit" in action
     assert 'description: "Contract revision: base, head, or worktree."' in action
@@ -44,7 +47,9 @@ def test_composite_action_defaults_marketplace_inputs_safely():
 
 
 def test_composite_action_base_fallback_priority():
-    action = (Path(__file__).parents[1] / "action.yml").read_text()
+    action = (Path(__file__).parents[1] / "action.yml").read_text(
+        encoding="utf-8"
+    )
     assignment = next(
         line.strip()
         for line in action.splitlines()
@@ -80,7 +85,7 @@ def test_composite_action_base_fallback_priority():
     for environment, expected in cases:
         completed = subprocess.run(
             ["bash", "-c", f"{assignment}\nprintf '%s' \"${{base_ref}}\""],
-            env=environment,
+            env={**os.environ, **environment},
             check=True,
             capture_output=True,
             text=True,
@@ -107,7 +112,9 @@ def test_composite_action_manifest_and_shell_are_parseable():
 
 
 def test_composite_action_forwards_each_check_result_to_the_shared_cli():
-    action = (Path(__file__).parents[1] / "action.yml").read_text()
+    action = (Path(__file__).parents[1] / "action.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "check-results:" in action
     assert "REPOWITNESS_ACTION_CHECK_RESULTS: ${{ inputs.check-results }}" in action
@@ -116,7 +123,9 @@ def test_composite_action_forwards_each_check_result_to_the_shared_cli():
 
 
 def test_composite_action_forwards_native_results_with_snapshot_provenance():
-    action = (Path(__file__).parents[1] / "action.yml").read_text()
+    action = (Path(__file__).parents[1] / "action.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "junit:" in action
     assert "sarif:" in action
@@ -127,7 +136,9 @@ def test_composite_action_forwards_native_results_with_snapshot_provenance():
 
 
 def test_composite_action_updates_a_marker_bound_pr_comment():
-    action = (Path(__file__).parents[1] / "action.yml").read_text()
+    action = (Path(__file__).parents[1] / "action.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "comment:" in action
     assert "github-token:" in action
@@ -148,7 +159,7 @@ def test_pr_workflow_runs_the_local_action_and_uploads_its_report():
         / ".github"
         / "workflows"
         / "repowitness-pr.yml"
-    ).read_text()
+    ).read_text(encoding="utf-8")
 
     assert "fetch-depth: 0" in workflow
     assert "uses: ./" in workflow
@@ -167,7 +178,7 @@ def test_pr_workflow_collects_snapshot_bound_deterministic_checks():
         / ".github"
         / "workflows"
         / "repowitness-pr.yml"
-    ).read_text()
+    ).read_text(encoding="utf-8")
 
     assert "repowitness snapshot" in workflow
     assert "python -m pytest tests/ -q" in workflow
@@ -192,7 +203,7 @@ def test_reusable_workflow_wraps_checkout_audit_comment_and_artifact():
         / ".github"
         / "workflows"
         / "repowitness-reusable.yml"
-    ).read_text()
+    ).read_text(encoding="utf-8")
 
     assert "workflow_call:" in workflow
     assert "api_key:" in workflow

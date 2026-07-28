@@ -31,5 +31,6 @@
 
 - Preserve compatibility tests for inherited CoreCoder behavior.
 - Add behavior tests through public interfaces for every new repository, contract, evidence, validation, or reporting capability.
+- Tests that read repository text must specify UTF-8 explicitly, and cross-platform subprocess tests must preserve the parent environment.
 - Run composite Action Bash syntax checks only on POSIX; the Windows matrix should not treat Git Bash stdin parsing as equivalent to a GitHub runner's `shell: bash`.
 - Run the full test suite, Ruff, and `compileall` before committing.
