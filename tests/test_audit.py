@@ -194,13 +194,7 @@ class _IncompleteThenRepairLLM(_ScriptedReviewLLM):
 
 
 class _IncompleteThenRepairContractLLM(_ScriptedReviewLLM):
-    def chat(
-        self,
-        messages,
-        tools=None,
-        on_token=None,
-        tool_choice=None,
-    ):
+    def chat(self, messages, tools=None, on_token=None):
         tool_names = {
             schema["function"]["name"] for schema in (tools or [])
         }
@@ -218,10 +212,6 @@ class _IncompleteThenRepairContractLLM(_ScriptedReviewLLM):
         if call == 1:
             return LLMResponse()
         if call == 2:
-            assert tool_choice == {
-                "type": "function",
-                "function": {"name": "submit_rules"},
-            }
             source_result = next(
                 message["content"]
                 for message in reversed(messages)

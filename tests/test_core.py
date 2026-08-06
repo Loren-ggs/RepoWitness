@@ -4,7 +4,7 @@ from repowitness import Agent, LLM, Config, ALL_TOOLS, __version__
 from repowitness import config as config_module
 from repowitness import session as session_module
 from repowitness.context import ContextManager, estimate_tokens
-from repowitness.llm import LLMResponse
+from repowitness.llm import LLMResponse, ToolCall
 from repowitness.session import save_session, load_session, list_sessions
 from repowitness.tools.edit import EditFileTool
 from repowitness.tools.read import ReadFileTool
@@ -253,6 +253,41 @@ def test_agent_does_not_replay_an_empty_assistant_message():
 
     assert agent.chat("first") == ""
     assert agent.chat("second") == "done"
+
+
+def test_agent_replays_reasoning_content_after_a_tool_call():
+    from repowitness.tools.base import Tool
+
+    class _ProbeTool(Tool):
+        name = "probe"
+        description = "Return evidence."
+        parameters = {"type": "object", "properties": {}, "required": []}
+
+        def execute(self):
+            return "evidence"
+
+    class _ReasoningToolLLM:
+        def __init__(self):
+            self.calls = 0
+
+        def chat(self, messages, tools=None, on_token=None):
+            self.calls += 1
+            if self.calls == 1:
+                return LLMResponse(
+                    reasoning_content="inspect evidence",
+                    tool_calls=[ToolCall("call-1", "probe", {})],
+                )
+            assistant = next(
+                message
+                for message in messages
+                if message.get("tool_calls")
+            )
+            assert assistant["reasoning_content"] == "inspect evidence"
+            return LLMResponse(content="done")
+
+    agent = Agent(llm=_ReasoningToolLLM(), tools=[_ProbeTool()], system="test")
+
+    assert agent.chat("review") == "done"
 
 
 def test_interrupt_backfills_missing_tool_replies():

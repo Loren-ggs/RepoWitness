@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 
-from repowitness.llm import LLM, LiteLLM, LLMResponse
+from repowitness.llm import LLM, LiteLLM, LLMResponse, ToolCall
 from repowitness.config import Config
 
 
@@ -15,9 +15,10 @@ from repowitness.config import Config
 
 
 class _Delta:
-    def __init__(self, content=None, tool_calls=None):
+    def __init__(self, content=None, tool_calls=None, reasoning_content=None):
         self.content = content
         self.tool_calls = tool_calls
+        self.reasoning_content = reasoning_content
 
 
 class _Choice:
@@ -32,8 +33,20 @@ class _Usage:
 
 
 class _Chunk:
-    def __init__(self, content=None, usage=None, tool_calls=None):
-        self.choices = [_Choice(_Delta(content=content, tool_calls=tool_calls))] if content or tool_calls else []
+    def __init__(self, content=None, usage=None, tool_calls=None, reasoning_content=None):
+        self.choices = (
+            [
+                _Choice(
+                    _Delta(
+                        content=content,
+                        tool_calls=tool_calls,
+                        reasoning_content=reasoning_content,
+                    )
+                )
+            ]
+            if content or tool_calls or reasoning_content
+            else []
+        )
         self.usage = usage
 
 
@@ -154,27 +167,35 @@ class TestCallWithRetry:
 # ---------------------------------------------------------------------------
 
 
-def test_openai_compatible_chat_forwards_specific_tool_choice():
+def test_openai_compatible_chat_preserves_streamed_reasoning():
     llm = LLM.__new__(LLM)
     llm.model = "deepseek-v4-flash"
     llm.extra = {}
     llm.total_prompt_tokens = 0
     llm.total_completion_tokens = 0
     llm._call_with_retry = mock.MagicMock(
-        return_value=_make_stream(["done"])
-    )
-    choice = {
-        "type": "function",
-        "function": {"name": "submit_rules"},
-    }
-
-    llm.chat(
-        messages=[{"role": "user", "content": "submit"}],
-        tools=[{"type": "function", "function": {"name": "submit_rules"}}],
-        tool_choice=choice,
+        return_value=iter(
+            [
+                _Chunk(reasoning_content="inspect "),
+                _Chunk(reasoning_content="contract"),
+                _Chunk(content="done", usage=_Usage()),
+            ]
+        )
     )
 
-    assert llm._call_with_retry.call_args.args[0]["tool_choice"] == choice
+    result = llm.chat(messages=[{"role": "user", "content": "compile"}])
+
+    assert result.reasoning_content == "inspect contract"
+
+
+def test_llm_response_message_preserves_reasoning_with_tool_calls():
+    response = LLMResponse(
+        reasoning_content="inspect contract",
+        tool_calls=[ToolCall("call-1", "contract_sources", {})],
+    )
+
+    assert response.message["reasoning_content"] == "inspect contract"
+    assert response.message["tool_calls"][0]["id"] == "call-1"
 
 
 class TestChat:
@@ -198,6 +219,20 @@ class TestChat:
         assert llm.total_prompt_tokens == 10
         assert llm.total_completion_tokens == 5
 
+    def test_preserves_streamed_reasoning(self):
+        self.fake.completion.return_value = iter(
+            [
+                _Chunk(reasoning_content="inspect "),
+                _Chunk(reasoning_content="contract"),
+                _Chunk(usage=_Usage()),
+            ]
+        )
+        llm = LiteLLM(model="deepseek/deepseek-chat")
+
+        result = llm.chat(messages=[{"role": "user", "content": "compile"}])
+
+        assert result.reasoning_content == "inspect contract"
+
     def test_on_token_callback(self):
         llm = LiteLLM(model="openai/gpt-4o")
         tokens = []
@@ -219,22 +254,6 @@ class TestChat:
         llm.chat(messages=[{"role": "user", "content": "hi"}])
         call_kwargs = self.fake.completion.call_args[1]
         assert call_kwargs["stream_options"] == {"include_usage": True}
-
-    def test_forwards_specific_tool_choice(self):
-        llm = LiteLLM(model="openai/gpt-4o")
-        choice = {
-            "type": "function",
-            "function": {"name": "submit_rules"},
-        }
-
-        llm.chat(
-            messages=[{"role": "user", "content": "submit"}],
-            tools=[{"type": "function", "function": {"name": "submit_rules"}}],
-            tool_choice=choice,
-        )
-
-        assert self.fake.completion.call_args.kwargs["tool_choice"] == choice
-
 
 # ---------------------------------------------------------------------------
 # Config integration

@@ -48,30 +48,17 @@ class Agent:
     def _tool_schemas(self) -> list[dict]:
         return [t.schema() for t in self.tools]
 
-    def chat(
-        self,
-        user_input: str,
-        on_token=None,
-        on_tool=None,
-        *,
-        required_tool: str | None = None,
-    ) -> str:
+    def chat(self, user_input: str, on_token=None, on_tool=None) -> str:
         """Process one user message. May involve multiple LLM/tool rounds."""
         self.messages.append({"role": "user", "content": user_input})
         self.context.maybe_compress(self.messages, self.llm)
 
         for _ in range(self.max_rounds):
-            chat_kwargs = {
-                "messages": self._full_messages(),
-                "tools": self._tool_schemas(),
-                "on_token": on_token,
-            }
-            if required_tool:
-                chat_kwargs["tool_choice"] = {
-                    "type": "function",
-                    "function": {"name": required_tool},
-                }
-            resp = self.llm.chat(**chat_kwargs)
+            resp = self.llm.chat(
+                messages=self._full_messages(),
+                tools=self._tool_schemas(),
+                on_token=on_token,
+            )
 
             # no tool calls -> LLM is done, return text
             if not resp.tool_calls:
@@ -82,10 +69,6 @@ class Agent:
             # tool calls -> execute (parallel when multiple, like Claude Code's
             # StreamingToolExecutor which runs independent tools concurrently)
             self.messages.append(resp.message)
-            if required_tool and any(
-                tc.name == required_tool for tc in resp.tool_calls
-            ):
-                required_tool = None
 
             try:
                 if len(resp.tool_calls) == 1:
