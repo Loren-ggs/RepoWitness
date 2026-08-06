@@ -19,6 +19,9 @@ from .tools import build_contract_tools, build_review_tools
 from .validation import validate_assessments
 
 
+_REVIEW_RULE_BATCH_SIZE = 6
+
+
 class AuditEngine:
     def __init__(self, llm):
         self._llm = llm
@@ -134,48 +137,56 @@ class AuditEngine:
                 result_paths=result_paths,
             )
         )
-        assessment_collector = AssessmentCollector(rules, evidence)
-
+        submitted_assessments = []
+        batch_count = (
+            len(rules) + _REVIEW_RULE_BATCH_SIZE - 1
+        ) // _REVIEW_RULE_BATCH_SIZE
         if rules:
-            review_agent = Agent(
-                llm=self._llm,
-                tools=build_review_tools(
-                    repository,
-                    evidence,
-                    assessment_collector,
-                    rules,
-                    include_untracked=request.include_untracked,
-                ),
-                system=review_prompt(rules),
-                max_rounds=25,
-            )
-            review_result = review_agent.chat(
-                "Review the current repository changes against every assigned rule."
-            )
-            remaining_rule_ids = assessment_collector.remaining_rule_ids
-            # ponytail: one repair pass bounds model cost; batch rules if this
-            # remains insufficient in real audits.
-            if remaining_rule_ids:
+            for start in range(0, len(rules), _REVIEW_RULE_BATCH_SIZE):
+                batch_rules = rules[start : start + _REVIEW_RULE_BATCH_SIZE]
+                batch_number = start // _REVIEW_RULE_BATCH_SIZE + 1
+                assessment_collector = AssessmentCollector(batch_rules, evidence)
+                review_agent = Agent(
+                    llm=self._llm,
+                    tools=build_review_tools(
+                        repository,
+                        evidence,
+                        assessment_collector,
+                        batch_rules,
+                        include_untracked=request.include_untracked,
+                    ),
+                    system=review_prompt(batch_rules),
+                    max_rounds=12,
+                )
                 review_result = review_agent.chat(
-                    "Your assessment submission is incomplete. Submit assessments "
-                    "for these remaining rule IDs before finishing: "
-                    + ", ".join(remaining_rule_ids)
+                    "Review the current repository changes against every assigned rule."
                 )
                 remaining_rule_ids = assessment_collector.remaining_rule_ids
-            if remaining_rule_ids:
-                stop_reason = (
-                    "max_rounds"
-                    if review_result == "(reached maximum tool-call rounds)"
-                    else "model_response"
-                )
-                issues.append(
-                    "Review Agent assessment coverage remained incomplete after "
-                    f"one repair pass: submitted "
-                    f"{len(assessment_collector.assessments)}/{len(rules)}; "
-                    "remaining rule IDs: "
-                    + ", ".join(remaining_rule_ids)
-                    + f"; stop_reason={stop_reason}."
-                )
+                if (
+                    remaining_rule_ids
+                    and review_result != "(reached maximum tool-call rounds)"
+                ):
+                    review_result = review_agent.chat(
+                        "Your assessment submission is incomplete. Submit assessments "
+                        "for these remaining rule IDs before finishing: "
+                        + ", ".join(remaining_rule_ids)
+                    )
+                    remaining_rule_ids = assessment_collector.remaining_rule_ids
+                if remaining_rule_ids:
+                    stop_reason = (
+                        "max_rounds"
+                        if review_result == "(reached maximum tool-call rounds)"
+                        else "model_response"
+                    )
+                    issues.append(
+                        "Review Agent assessment coverage remained incomplete in "
+                        f"batch {batch_number}/{batch_count}: submitted "
+                        f"{len(assessment_collector.assessments)}/{len(batch_rules)}; "
+                        f"{len(remaining_rule_ids)} remaining; examples: "
+                        + ", ".join(remaining_rule_ids[:3])
+                        + f"; stop_reason={stop_reason}."
+                    )
+                submitted_assessments.extend(assessment_collector.assessments)
         elif contracts.spans:
             if compiled_rules:
                 issues.append("No compiled repository rules apply to the current changes.")
@@ -185,7 +196,7 @@ class AuditEngine:
         assessments = validate_assessments(
             rules,
             evidence,
-            assessment_collector.assessments,
+            tuple(submitted_assessments),
         )
         return AuditReport(
             base_revision=repository.base_revision,

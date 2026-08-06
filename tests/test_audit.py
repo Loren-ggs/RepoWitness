@@ -193,6 +193,78 @@ class _IncompleteThenRepairLLM(_ScriptedReviewLLM):
         return LLMResponse(content="Review complete.")
 
 
+class _BatchLimitedReviewLLM(_ScriptedReviewLLM):
+    def __init__(self):
+        super().__init__(
+            applies_to=(),
+            statements=tuple(f"Rule {index}." for index in range(12)),
+        )
+
+    def chat(self, messages, tools=None, on_token=None):
+        tool_names = {
+            schema["function"]["name"] for schema in (tools or [])
+        }
+        if "contract_sources" in tool_names:
+            return super().chat(messages, tools=tools, on_token=on_token)
+
+        self.calls["review"] += 1
+        rule_ids = re.findall(r"RW-[A-F0-9]+", messages[0]["content"])
+        if len(rule_ids) > 6:
+            return LLMResponse(
+                tool_calls=[
+                    ToolCall(f"review-{self.calls['review']}", "changed_files", {})
+                ]
+            )
+        if messages[-1]["role"] == "tool":
+            assert json.loads(messages[-1]["content"])["complete"] is True
+            return LLMResponse(content="Review complete.")
+        return LLMResponse(
+            tool_calls=[
+                ToolCall(
+                    f"review-{self.calls['review']}",
+                    "submit_assessments",
+                    {
+                        "assessments": [
+                            {
+                                "rule_id": rule_id,
+                                "verdict": "UNVERIFIED",
+                                "evidence_handles": [],
+                                "rationale": "没有足够证据。",
+                                "next_step": "人工检查。",
+                            }
+                            for rule_id in rule_ids
+                        ]
+                    },
+                )
+            ]
+        )
+
+
+class _SecondBatchExhaustsLLM(_BatchLimitedReviewLLM):
+    def __init__(self):
+        super().__init__()
+        self.failed_batch_calls = 0
+
+    def chat(self, messages, tools=None, on_token=None):
+        tool_names = {
+            schema["function"]["name"] for schema in (tools or [])
+        }
+        if "contract_sources" not in tool_names and '"Rule 6."' in messages[0]["content"]:
+            self.failed_batch_calls += 1
+            if self.failed_batch_calls > 12:
+                raise AssertionError("review batch exceeded its round budget")
+            return LLMResponse(
+                tool_calls=[
+                    ToolCall(
+                        f"exhausted-{self.failed_batch_calls}",
+                        "changed_files",
+                        {},
+                    )
+                ]
+            )
+        return super().chat(messages, tools=tools, on_token=on_token)
+
+
 class _IncompleteThenRepairContractLLM(_ScriptedReviewLLM):
     def chat(self, messages, tools=None, on_token=None):
         tool_names = {
@@ -382,6 +454,41 @@ def test_audit_engine_retries_when_review_agent_submits_only_some_rules(
         for assessment in report.assessments
     )
     assert llm.calls["review"] == 4
+
+
+def test_audit_engine_partitions_large_rule_sets_for_complete_review(tmp_path):
+    _repository_with_two_rules(tmp_path)
+
+    report = AuditEngine(_BatchLimitedReviewLLM()).audit(
+        AuditRequest(repository_path=tmp_path, base_ref="HEAD")
+    )
+
+    assert len(report.rules) == 12
+    assert len(report.assessments) == 12
+    assert all(assessment.limitations == () for assessment in report.assessments)
+    assert not any("coverage remained incomplete" in issue for issue in report.issues)
+
+
+def test_audit_engine_isolates_and_summarizes_an_exhausted_review_batch(tmp_path):
+    _repository_with_two_rules(tmp_path)
+    llm = _SecondBatchExhaustsLLM()
+
+    report = AuditEngine(llm).audit(
+        AuditRequest(repository_path=tmp_path, base_ref="HEAD")
+    )
+
+    completed = [item for item in report.assessments if not item.limitations]
+    missing = [item for item in report.assessments if item.limitations]
+    issue = next(
+        item for item in report.issues if "coverage remained incomplete" in item
+    )
+    assert len(completed) == 6
+    assert len(missing) == 6
+    assert llm.failed_batch_calls == 12
+    assert "batch 2/2" in issue
+    assert "submitted 0/6" in issue
+    assert "6 remaining" in issue
+    assert issue.count("RW-") == 3
 
 
 def test_audit_engine_retries_when_contract_agent_skips_rule_submission(
