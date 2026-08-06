@@ -173,9 +173,11 @@ def test_pr_workflow_runs_the_local_action_and_uploads_its_report():
     ).read_text(encoding="utf-8")
 
     assert "fetch-depth: 0" in workflow
+    assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert "uses: ./" in workflow
     assert "contracts-ref: base" in workflow
     assert "api-key: ${{ secrets.REPOWITNESS_API_KEY }}" in workflow
+    assert "REPOWITNESS_REASONING_EFFORT: ${{ vars.REPOWITNESS_REASONING_EFFORT || 'low' }}" in workflow
     assert "github.event.pull_request.head.repo.full_name == github.repository" in workflow
     assert "pull-requests: write" in workflow
     assert "fail-on: fail" in workflow
@@ -225,11 +227,13 @@ def test_repowitness_workflow_wraps_checkout_review_comment_and_artifact():
     assert "github.event.pull_request.head.repo.full_name == github.repository" in workflow
     assert "actions/checkout@v6" in workflow
     assert "fetch-depth: 0" in workflow
+    assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert "jobs:\n  repowitness:" in workflow
     assert "uses: Loren-ggs/RepoWitness@v0.4.1" in workflow
     assert "api-key: ${{ secrets.api_key }}" in workflow
     assert "REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}" in workflow
     assert "REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}" in workflow
+    assert "REPOWITNESS_REASONING_EFFORT: ${{ vars.REPOWITNESS_REASONING_EFFORT || 'low' }}" in workflow
     assert "comment: ${{ inputs.comment }}" in workflow
     assert "actions/upload-artifact@v7" in workflow
     assert "steps.repowitness.outputs.report" in workflow

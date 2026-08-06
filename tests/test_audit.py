@@ -193,6 +193,52 @@ class _IncompleteThenRepairLLM(_ScriptedReviewLLM):
         return LLMResponse(content="Review complete.")
 
 
+class _IncompleteThenRepairContractLLM(_ScriptedReviewLLM):
+    def chat(self, messages, tools=None, on_token=None):
+        tool_names = {
+            schema["function"]["name"] for schema in (tools or [])
+        }
+        if "contract_sources" not in tool_names:
+            return super().chat(messages, tools=tools, on_token=on_token)
+
+        call = self.calls["contract"]
+        self.calls["contract"] += 1
+        if call == 0:
+            return LLMResponse(
+                tool_calls=[
+                    ToolCall("contract-1", "contract_sources", {})
+                ]
+            )
+        if call == 1:
+            return LLMResponse()
+        if call == 2:
+            source_result = next(
+                message["content"]
+                for message in reversed(messages)
+                if message["role"] == "tool"
+            )
+            span_id = json.loads(source_result)["sources"][0]["spans"][0][
+                "span_id"
+            ]
+            return LLMResponse(
+                tool_calls=[
+                    ToolCall(
+                        "contract-2",
+                        "submit_rules",
+                        {
+                            "rules": [
+                                {
+                                    "source_span_id": span_id,
+                                    "statement": "公共 API 必须保持兼容。",
+                                }
+                            ]
+                        },
+                    )
+                ]
+            )
+        return LLMResponse(content="Contract compilation complete.")
+
+
 class _DocSelectingReviewLLM(_ScriptedReviewLLM):
     def chat(self, messages, tools=None, on_token=None):
         tool_names = {
@@ -336,6 +382,24 @@ def test_audit_engine_retries_when_review_agent_submits_only_some_rules(
         for assessment in report.assessments
     )
     assert llm.calls["review"] == 4
+
+
+def test_audit_engine_retries_when_contract_agent_skips_rule_submission(
+    tmp_path,
+):
+    _repository_with_two_rules(tmp_path)
+    llm = _IncompleteThenRepairContractLLM()
+
+    report = AuditEngine(llm).audit(
+        AuditRequest(repository_path=tmp_path, base_ref="HEAD")
+    )
+
+    assert len(report.rules) == 1
+    assert llm.calls["contract"] == 4
+    assert not any(
+        "did not submit any actionable rules" in issue
+        for issue in report.issues
+    )
 
 
 def test_audit_reports_coverage_when_repair_stays_incomplete(tmp_path):

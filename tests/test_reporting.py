@@ -99,17 +99,17 @@ def test_json_is_canonical_and_markdown_is_rendered_from_the_same_report():
         "start_line": 3,
         "end_line": 3,
     }
-    assert "# RepoWitness 审查报告" in markdown
-    assert "## 规范来源" in markdown
+    assert "# 🛡️ RepoWitness 审查报告" in markdown
+    assert "<summary>📚 <strong>规范来源 · 1 份</strong></summary>" in markdown
     assert "规则：编译 2 · 适用 1 · 已评估 1" in markdown
-    assert "## 规则适用性" in markdown
+    assert "<summary>🧭 <strong>规则适用性 · 1 项</strong></summary>" in markdown
     assert "RW-NOT-APPLICABLE" in markdown
     assert "not_applicable" in markdown
     assert "Documentation changes require review." in markdown
     assert "FAIL" in markdown
-    assert "### FAIL · `app.py:12`" in markdown
-    assert "### FAIL · RW-ABC123" not in markdown
-    assert "- 规则编号：`RW-ABC123`" in markdown
+    assert "### ❌ FAIL · `app.py:12`" in markdown
+    assert "### ❌ FAIL · RW-ABC123" not in markdown
+    assert "- 🆔 规则编号：`RW-ABC123`" in markdown
     assert markdown.index("evidence-diff") < markdown.index(
         "规则编号：`RW-ABC123`"
     )
@@ -159,7 +159,7 @@ def test_markdown_does_not_treat_glob_evidence_as_a_code_location():
         )
     )
 
-    assert "### UNVERIFIED · `未定位到具体代码行`" in markdown
+    assert "### ❔ UNVERIFIED · `未定位到具体代码行`" in markdown
     assert "`evidence-glob` · `repository_glob` · `head`" in markdown
     assert markdown.index("evidence-glob") < markdown.index(
         "规则编号：`RW-ABC123`"
@@ -205,11 +205,17 @@ def test_markdown_lists_non_passing_results_before_passes():
 
     markdown = render_markdown(report)
 
-    assert "FAIL 1 · WARN 1 · UNVERIFIED 1 · PASS 1" in markdown
-    positions = [
-        markdown.index(f"### {verdict} ·")
-        for verdict in ("FAIL", "WARN", "UNVERIFIED", "PASS")
-    ]
+    assert "❌ FAIL 1 · ⚠️ WARN 1 · ❔ UNVERIFIED 1 · ✅ PASS 1" in markdown
+    summaries = (
+        "<summary>❌ <strong>不符合（FAIL）· 1 项</strong></summary>",
+        "<summary>⚠️ <strong>需关注（WARN）· 1 项</strong></summary>",
+        "<summary>❔ <strong>未验证（UNVERIFIED）· 1 项</strong></summary>",
+        "<summary>✅ <strong>符合（PASS）· 1 项</strong></summary>",
+    )
+    positions = [markdown.index(summary) for summary in summaries]
     assert positions == sorted(positions)
-    assert "### UNVERIFIED · `未定位到具体代码行`" in markdown
-    assert markdown.count("- 证据：\n  - 无可用证据") == 4
+    assert markdown.count("<details open>") == 2
+    assert "<details>\n<summary>❔" in markdown
+    assert "<details>\n<summary>✅" in markdown
+    assert "### ❔ UNVERIFIED · `未定位到具体代码行`" in markdown
+    assert markdown.count("- 🔗 证据：\n  - 无可用证据") == 4

@@ -26,6 +26,7 @@ class ToolCall:
 @dataclass
 class LLMResponse:
     content: str = ""
+    reasoning_content: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -34,6 +35,8 @@ class LLMResponse:
     def message(self) -> dict:
         """Convert to OpenAI message format for appending to history."""
         msg: dict = {"role": "assistant", "content": self.content or None}
+        if self.reasoning_content:
+            msg["reasoning_content"] = self.reasoning_content
         if self.tool_calls:
             msg["tool_calls"] = [
                 {
@@ -134,6 +137,7 @@ class LLM:
             stream = self._call_with_retry(params)
 
         content_parts: list[str] = []
+        reasoning_parts: list[str] = []
         tc_map: dict[int, dict] = {}  # index -> {id, name, arguments_str}
         prompt_tok = 0
         completion_tok = 0
@@ -149,6 +153,10 @@ class LLM:
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
+
+            reasoning = getattr(delta, "reasoning_content", None)
+            if reasoning:
+                reasoning_parts.append(reasoning)
 
             # accumulate text
             if delta.content:
@@ -185,6 +193,7 @@ class LLM:
 
         return LLMResponse(
             content="".join(content_parts),
+            reasoning_content="".join(reasoning_parts),
             tool_calls=parsed,
             prompt_tokens=prompt_tok,
             completion_tokens=completion_tok,
@@ -259,6 +268,7 @@ class LiteLLM(LLM):
         stream = self._call_with_retry(params)
 
         content_parts: list[str] = []
+        reasoning_parts: list[str] = []
         tc_map: dict[int, dict] = {}
         prompt_tok = 0
         completion_tok = 0
@@ -272,6 +282,10 @@ class LiteLLM(LLM):
             if not getattr(chunk, "choices", None):
                 continue
             delta = chunk.choices[0].delta
+
+            reasoning = getattr(delta, "reasoning_content", None)
+            if reasoning:
+                reasoning_parts.append(reasoning)
 
             if getattr(delta, "content", None):
                 content_parts.append(delta.content)
@@ -305,6 +319,7 @@ class LiteLLM(LLM):
 
         return LLMResponse(
             content="".join(content_parts),
+            reasoning_content="".join(reasoning_parts),
             tool_calls=parsed,
             prompt_tokens=prompt_tok,
             completion_tokens=completion_tok,

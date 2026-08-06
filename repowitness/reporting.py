@@ -8,6 +8,12 @@ import re
 from .domain import AuditReport
 
 _VERDICT_DISPLAY_ORDER = ("FAIL", "WARN", "UNVERIFIED", "PASS")
+_VERDICT_PRESENTATION = {
+    "FAIL": ("❌", "不符合", True),
+    "WARN": ("⚠️", "需关注", True),
+    "UNVERIFIED": ("❔", "未验证", False),
+    "PASS": ("✅", "符合", False),
+}
 _DIFF_HUNK = re.compile(
     r"^@@ -\d+(?:,\d+)? \+(?P<line>\d+)(?:,\d+)? @@"
 )
@@ -140,20 +146,24 @@ def render_markdown(report: AuditReport) -> str:
     payload = report_to_dict(report)
     summary = payload["summary"]
     counts = summary["counts"]
+    overall_icon = _VERDICT_PRESENTATION[summary["overall"]][0]
     lines = [
-        "# RepoWitness 审查报告",
+        "# 🛡️ RepoWitness 审查报告",
         "",
-        f"**总体结论：{summary['overall']}**",
+        f"## {overall_icon} 总体结论：{summary['overall']}",
         "",
         " · ".join(
-            f"{verdict} {counts[verdict]}"
+            f"{_VERDICT_PRESENTATION[verdict][0]} {verdict} {counts[verdict]}"
             for verdict in _VERDICT_DISPLAY_ORDER
         ),
         (
-            f"规则：编译 {summary['rules_discovered']} · "
+            f"📏 规则：编译 {summary['rules_discovered']} · "
             f"适用 {summary['rules_applicable']} · "
             f"已评估 {summary['rules_evaluated']}"
         ),
+        "",
+        "<details>",
+        "<summary>⚙️ <strong>审查上下文</strong></summary>",
         "",
         f"- Base：`{payload['run']['base_revision']}`",
         f"- Head：`{payload['run']['head_revision']}`",
@@ -161,9 +171,18 @@ def render_markdown(report: AuditReport) -> str:
         f"- 规范版本：`{payload['run']['contracts_ref']}`",
         f"- Model：`{payload['run']['model']}`",
         f"- Mode：`{payload['run']['mode']}`",
+        "",
+        "</details>",
     ]
 
-    lines.extend(["", "## 规范来源", ""])
+    lines.extend(
+        [
+            "",
+            "<details>",
+            f"<summary>📚 <strong>规范来源 · {len(payload['contracts'])} 份</strong></summary>",
+            "",
+        ]
+    )
     if payload["contracts"]:
         for source in payload["contracts"]:
             scope = source["scope_path"] or "全仓库"
@@ -173,9 +192,10 @@ def render_markdown(report: AuditReport) -> str:
             )
     else:
         lines.append("未发现可用的仓库规范文档。")
+    lines.extend(["", "</details>"])
 
     if payload["contract_changes"]:
-        lines.extend(["", "## 本次规范文档变更", ""])
+        lines.extend(["", "## 📝 本次规范文档变更", ""])
         if payload["run"]["contracts_ref"] == "base":
             lines.append(
                 "以下变更会单独提示；本次仍以 base 版本规范审查代码变更。"
@@ -192,7 +212,7 @@ def render_markdown(report: AuditReport) -> str:
         )
 
     if payload["conflicts"]:
-        lines.extend(["", "## 规范冲突", ""])
+        lines.extend(["", "## 🚨 规范冲突", ""])
         for conflict in payload["conflicts"]:
             state = "已按优先级解析" if conflict["resolved"] else "需要人工确认"
             lines.extend(
@@ -209,60 +229,88 @@ def render_markdown(report: AuditReport) -> str:
         if decision["status"] != "applicable"
     ]
     if noteworthy_selection:
-        lines.extend(["", "## 规则适用性", ""])
+        lines.extend(
+            [
+                "",
+                "<details>",
+                (
+                    "<summary>🧭 <strong>规则适用性 · "
+                    f"{len(noteworthy_selection)} 项</strong></summary>"
+                ),
+                "",
+            ]
+        )
         lines.extend(
             f"- `{decision['rule_id']}` · `{decision['status']}` · "
             f"{decision['statement']}（`{decision['source_path']}`）"
             f"\n  - {decision['reason']}"
             for decision in noteworthy_selection
         )
+        lines.extend(["", "</details>"])
 
     if payload["issues"]:
-        lines.extend(["", "## 审查限制", ""])
+        lines.extend(["", "## 🚧 审查限制", ""])
         lines.extend(f"- {issue}" for issue in payload["issues"])
 
-    lines.extend(["", "## 规则结论", ""])
+    lines.extend(["", "## 🔎 规则结论", ""])
     if not payload["assessments"]:
         lines.append("没有可评估的规则。")
 
-    for assessment in sorted(
-        payload["assessments"],
-        key=lambda item: _VERDICT_DISPLAY_ORDER.index(item["verdict"]),
-    ):
-        rule = assessment["rule"]
-        source = rule["source"]
-        rule_location = (
-            f"{source['path']}:{source['start_line']}"
-            if source["start_line"] == source["end_line"]
-            else (f"{source['path']}:{source['start_line']}-{source['end_line']}")
-        )
-        finding_location = _finding_location(assessment["evidence"])
+    for verdict in _VERDICT_DISPLAY_ORDER:
+        verdict_assessments = [
+            item for item in payload["assessments"] if item["verdict"] == verdict
+        ]
+        if not verdict_assessments:
+            continue
+        icon, label, expanded = _VERDICT_PRESENTATION[verdict]
         lines.extend(
             [
-                f"### {assessment['verdict']} · `{finding_location}`",
+                f"<details{' open' if expanded else ''}>",
+                (
+                    f"<summary>{icon} <strong>{label}（{verdict}）· "
+                    f"{len(verdict_assessments)} 项</strong></summary>"
+                ),
                 "",
-                f"> {rule['statement']}",
-                "",
-                f"- 规则来源：`{rule_location}`（{source['revision']}）",
-                f"- 判断依据：{assessment['rationale']}",
-                f"- 下一步：{assessment['next_step']}",
-                "- 证据：",
             ]
         )
-        if assessment["evidence"]:
-            for record in assessment["evidence"]:
-                target = (
-                    _evidence_location(record)
-                    or record["path"]
-                    or record["kind"]
-                )
-                lines.append(f"  - `{record['handle']}` · `{target}` · `{record['revision']}`")
-        else:
-            lines.append("  - 无可用证据")
-        lines.append(f"- 规则编号：`{rule['rule_id']}`")
-        if assessment["limitations"]:
-            lines.append("- 限制：" + "；".join(assessment["limitations"]))
-        lines.append("")
+        for assessment in verdict_assessments:
+            rule = assessment["rule"]
+            source = rule["source"]
+            rule_location = (
+                f"{source['path']}:{source['start_line']}"
+                if source["start_line"] == source["end_line"]
+                else (f"{source['path']}:{source['start_line']}-{source['end_line']}")
+            )
+            finding_location = _finding_location(assessment["evidence"])
+            lines.extend(
+                [
+                    f"### {icon} {verdict} · `{finding_location}`",
+                    "",
+                    f"> {rule['statement']}",
+                    "",
+                    f"- 📌 规则来源：`{rule_location}`（{source['revision']}）",
+                    f"- 💡 判断依据：{assessment['rationale']}",
+                    f"- 🛠️ 下一步：{assessment['next_step']}",
+                    "- 🔗 证据：",
+                ]
+            )
+            if assessment["evidence"]:
+                for record in assessment["evidence"]:
+                    target = (
+                        _evidence_location(record)
+                        or record["path"]
+                        or record["kind"]
+                    )
+                    lines.append(
+                        f"  - `{record['handle']}` · `{target}` · `{record['revision']}`"
+                    )
+            else:
+                lines.append("  - 无可用证据")
+            lines.append(f"- 🆔 规则编号：`{rule['rule_id']}`")
+            if assessment["limitations"]:
+                lines.append("- ⚠️ 限制：" + "；".join(assessment["limitations"]))
+            lines.append("")
+        lines.extend(["</details>", ""])
 
     return "\n".join(lines).rstrip() + "\n"
 

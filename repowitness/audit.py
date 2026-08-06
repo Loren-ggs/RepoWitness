@@ -52,6 +52,7 @@ class AuditEngine:
             )
             contract_agent.chat("Compile the authoritative repository contract into rules.")
         contracts = contract_discovery.catalog
+        contract_sources_called = contracts is not None
         if contracts is None:
             contracts = contract_discovery.load(())
             if has_contract_candidates:
@@ -65,6 +66,19 @@ class AuditEngine:
         if not contracts.spans:
             issues.append(
                 f"No repository contract sources were found at {request.contracts_ref}."
+            )
+
+        if (
+            has_contract_candidates
+            and contracts.spans
+            and contract_sources_called
+            and not rule_collector.rules
+        ):
+            # ponytail: one repair pass bounds model cost; deterministic rule
+            # extraction can replace this when model-only compilation is retired.
+            contract_agent.chat(
+                "Your contract compilation is incomplete. Call submit_rules "
+                "once with every actionable rule before finishing."
             )
 
         compiled_rules = rule_collector.rules

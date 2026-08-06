@@ -226,12 +226,17 @@ def main(
             )
             return 1
         llm_cls = LiteLLM if config.provider == "litellm" else LLM
+        llm_options = {
+            "temperature": config.temperature,
+            "max_tokens": config.max_tokens,
+        }
+        if config.reasoning_effort:
+            llm_options["reasoning_effort"] = config.reasoning_effort
         llm = llm_cls(
             model=config.model,
             api_key=config.api_key,
             base_url=config.base_url,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            **llm_options,
         )
         engine = AuditEngine(llm)
 
