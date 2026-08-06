@@ -36,8 +36,10 @@ def test_public_api_exports():
 
 def test_config_from_env(monkeypatch):
     monkeypatch.setenv("CORECODER_MODEL", "test-model")
+    monkeypatch.setenv("REPOWITNESS_REASONING_EFFORT", "low")
     c = Config.from_env()
     assert c.model == "test-model"
+    assert c.reasoning_effort == "low"
 
 
 def test_config_defaults(monkeypatch):
@@ -45,13 +47,16 @@ def test_config_defaults(monkeypatch):
     monkeypatch.setattr(config_module, "_load_dotenv", lambda: None)
     monkeypatch.delenv("REPOWITNESS_MODEL", raising=False)
     monkeypatch.delenv("REPOWITNESS_MAX_TOKENS", raising=False)
+    monkeypatch.delenv("REPOWITNESS_REASONING_EFFORT", raising=False)
     monkeypatch.delenv("CORECODER_MODEL", raising=False)
     monkeypatch.delenv("CORECODER_MAX_TOKENS", raising=False)
+    monkeypatch.delenv("CORECODER_REASONING_EFFORT", raising=False)
 
     c = Config.from_env()
     assert c.model == "gpt-5.5"
     assert c.max_tokens == 4096
     assert c.temperature == 0.0
+    assert c.reasoning_effort is None
 
 
 # --- Context ---

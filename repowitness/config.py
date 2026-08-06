@@ -118,6 +118,7 @@ class Config:
     base_url: str | None = None
     max_tokens: int = 4096
     temperature: float = 0.0
+    reasoning_effort: str | None = None
     max_context_tokens: int = 128_000
     provider: str = "openai"
 
@@ -154,6 +155,10 @@ class Config:
                 os.getenv("REPOWITNESS_TEMPERATURE")
                 or os.getenv("CORECODER_TEMPERATURE")
                 or "0"
+            ),
+            reasoning_effort=(
+                os.getenv("REPOWITNESS_REASONING_EFFORT")
+                or os.getenv("CORECODER_REASONING_EFFORT")
             ),
             max_context_tokens=int(
                 os.getenv("REPOWITNESS_MAX_CONTEXT")

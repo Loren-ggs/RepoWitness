@@ -170,7 +170,7 @@ class TestCallWithRetry:
 def test_openai_compatible_chat_preserves_streamed_reasoning():
     llm = LLM.__new__(LLM)
     llm.model = "deepseek-v4-flash"
-    llm.extra = {}
+    llm.extra = {"reasoning_effort": "low"}
     llm.total_prompt_tokens = 0
     llm.total_completion_tokens = 0
     llm._call_with_retry = mock.MagicMock(
@@ -186,6 +186,7 @@ def test_openai_compatible_chat_preserves_streamed_reasoning():
     result = llm.chat(messages=[{"role": "user", "content": "compile"}])
 
     assert result.reasoning_content == "inspect contract"
+    assert llm._call_with_retry.call_args.args[0]["reasoning_effort"] == "low"
 
 
 def test_llm_response_message_preserves_reasoning_with_tool_calls():
@@ -247,6 +248,13 @@ class TestChat:
         llm.chat(messages=[{"role": "user", "content": "hi"}])
         call_kwargs = self.fake.completion.call_args[1]
         assert call_kwargs["model"] == "anthropic/claude-3-haiku"
+
+    def test_reasoning_effort_forwarded(self):
+        llm = LiteLLM(model="deepseek/deepseek-chat", reasoning_effort="low")
+
+        llm.chat(messages=[{"role": "user", "content": "compile"}])
+
+        assert self.fake.completion.call_args.kwargs["reasoning_effort"] == "low"
 
     def test_requests_usage_via_stream_options(self):
         """chat() must ask for usage stats, otherwise token tracking stays zero."""

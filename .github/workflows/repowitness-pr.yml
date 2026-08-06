@@ -114,7 +114,7 @@ jobs:
         env:
           REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
           REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
-          REPOWITNESS_MAX_TOKENS: ${{ vars.REPOWITNESS_MAX_TOKENS || '16384' }}
+          REPOWITNESS_REASONING_EFFORT: ${{ vars.REPOWITNESS_REASONING_EFFORT || 'low' }}
 
       - name: Upload RepoWitness report
         uses: actions/upload-artifact@v7
