@@ -112,6 +112,7 @@ class LLM:
         messages: list[dict],
         tools: list[dict] | None = None,
         on_token=None,
+        tool_choice: dict | str | None = None,
     ) -> LLMResponse:
         """Send messages, stream back response, handle tool calls."""
         params: dict = {
@@ -122,6 +123,8 @@ class LLM:
         }
         if tools:
             params["tools"] = tools
+        if tool_choice:
+            params["tool_choice"] = tool_choice
 
         # stream_options is an OpenAI extension; fall back only when the provider
         # rejects the param (400 BadRequest), not on transient errors that
@@ -242,6 +245,7 @@ class LiteLLM(LLM):
         messages: list[dict],
         tools: list[dict] | None = None,
         on_token=None,
+        tool_choice: dict | str | None = None,
     ) -> LLMResponse:
         """Send messages via litellm, stream back response, handle tool calls."""
         params: dict = {
@@ -252,6 +256,8 @@ class LiteLLM(LLM):
         }
         if tools:
             params["tools"] = tools
+        if tool_choice:
+            params["tool_choice"] = tool_choice
 
         # ask for usage stats in the final chunk; litellm drops this for providers
         # that don't support it (drop_params), so it's safe to always request

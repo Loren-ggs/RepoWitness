@@ -154,6 +154,29 @@ class TestCallWithRetry:
 # ---------------------------------------------------------------------------
 
 
+def test_openai_compatible_chat_forwards_specific_tool_choice():
+    llm = LLM.__new__(LLM)
+    llm.model = "deepseek-v4-flash"
+    llm.extra = {}
+    llm.total_prompt_tokens = 0
+    llm.total_completion_tokens = 0
+    llm._call_with_retry = mock.MagicMock(
+        return_value=_make_stream(["done"])
+    )
+    choice = {
+        "type": "function",
+        "function": {"name": "submit_rules"},
+    }
+
+    llm.chat(
+        messages=[{"role": "user", "content": "submit"}],
+        tools=[{"type": "function", "function": {"name": "submit_rules"}}],
+        tool_choice=choice,
+    )
+
+    assert llm._call_with_retry.call_args.args[0]["tool_choice"] == choice
+
+
 class TestChat:
     def setup_method(self):
         self.fake = _install_fake_litellm(["part1", "part2"])
@@ -196,6 +219,21 @@ class TestChat:
         llm.chat(messages=[{"role": "user", "content": "hi"}])
         call_kwargs = self.fake.completion.call_args[1]
         assert call_kwargs["stream_options"] == {"include_usage": True}
+
+    def test_forwards_specific_tool_choice(self):
+        llm = LiteLLM(model="openai/gpt-4o")
+        choice = {
+            "type": "function",
+            "function": {"name": "submit_rules"},
+        }
+
+        llm.chat(
+            messages=[{"role": "user", "content": "submit"}],
+            tools=[{"type": "function", "function": {"name": "submit_rules"}}],
+            tool_choice=choice,
+        )
+
+        assert self.fake.completion.call_args.kwargs["tool_choice"] == choice
 
 
 # ---------------------------------------------------------------------------

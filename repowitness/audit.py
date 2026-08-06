@@ -78,7 +78,8 @@ class AuditEngine:
             # extraction can replace this when model-only compilation is retired.
             contract_agent.chat(
                 "Your contract compilation is incomplete. Call submit_rules "
-                "once with every actionable rule before finishing."
+                "once with every actionable rule before finishing.",
+                required_tool="submit_rules",
             )
 
         compiled_rules = rule_collector.rules
