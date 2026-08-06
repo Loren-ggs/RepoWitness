@@ -62,7 +62,8 @@ class Agent:
 
             # no tool calls -> LLM is done, return text
             if not resp.tool_calls:
-                self.messages.append(resp.message)
+                if resp.content:
+                    self.messages.append(resp.message)
                 return resp.content
 
             # tool calls -> execute (parallel when multiple, like Claude Code's

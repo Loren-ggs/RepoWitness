@@ -4,6 +4,7 @@ from repowitness import Agent, LLM, Config, ALL_TOOLS, __version__
 from repowitness import config as config_module
 from repowitness import session as session_module
 from repowitness.context import ContextManager, estimate_tokens
+from repowitness.llm import LLMResponse
 from repowitness.session import save_session, load_session, list_sessions
 from repowitness.tools.edit import EditFileTool
 from repowitness.tools.read import ReadFileTool
@@ -229,6 +230,29 @@ def test_exec_tool_distinguishes_bad_args_from_internal_error():
     assert "bad arguments" in agent._exec_tool(_BadArgs())
     assert "Error executing boom" in agent._exec_tool(_Good())
     assert "bad arguments" not in agent._exec_tool(_Good())
+
+
+def test_agent_does_not_replay_an_empty_assistant_message():
+    class _EmptyThenCompleteLLM:
+        def __init__(self):
+            self.calls = 0
+
+        def chat(self, messages, tools=None, on_token=None):
+            self.calls += 1
+            if self.calls == 1:
+                return LLMResponse()
+            assert not any(
+                message["role"] == "assistant"
+                and message.get("content") is None
+                and not message.get("tool_calls")
+                for message in messages
+            )
+            return LLMResponse(content="done")
+
+    agent = Agent(llm=_EmptyThenCompleteLLM(), tools=[], system="test")
+
+    assert agent.chat("first") == ""
+    assert agent.chat("second") == "done"
 
 
 def test_interrupt_backfills_missing_tool_replies():

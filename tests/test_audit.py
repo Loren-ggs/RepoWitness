@@ -210,7 +210,7 @@ class _IncompleteThenRepairContractLLM(_ScriptedReviewLLM):
                 ]
             )
         if call == 1:
-            return LLMResponse(content="Contract compilation complete.")
+            return LLMResponse()
         if call == 2:
             source_result = next(
                 message["content"]
