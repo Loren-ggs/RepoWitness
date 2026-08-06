@@ -177,6 +177,7 @@ def test_pr_workflow_runs_the_local_action_and_uploads_its_report():
     assert "uses: ./" in workflow
     assert "contracts-ref: base" in workflow
     assert "api-key: ${{ secrets.REPOWITNESS_API_KEY }}" in workflow
+    assert "REPOWITNESS_MAX_TOKENS: ${{ vars.REPOWITNESS_MAX_TOKENS || '16384' }}" in workflow
     assert "github.event.pull_request.head.repo.full_name == github.repository" in workflow
     assert "pull-requests: write" in workflow
     assert "fail-on: fail" in workflow
@@ -232,6 +233,7 @@ def test_repowitness_workflow_wraps_checkout_review_comment_and_artifact():
     assert "api-key: ${{ secrets.api_key }}" in workflow
     assert "REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}" in workflow
     assert "REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}" in workflow
+    assert "REPOWITNESS_MAX_TOKENS: ${{ vars.REPOWITNESS_MAX_TOKENS || '16384' }}" in workflow
     assert "comment: ${{ inputs.comment }}" in workflow
     assert "actions/upload-artifact@v7" in workflow
     assert "steps.repowitness.outputs.report" in workflow
