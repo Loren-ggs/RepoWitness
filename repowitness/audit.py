@@ -19,7 +19,7 @@ from .tools import build_contract_tools, build_review_tools
 from .validation import validate_assessments
 
 
-_REVIEW_RULE_BATCH_SIZE = 6
+_REVIEW_RULE_BATCH_SIZE = 8
 
 
 class AuditEngine:

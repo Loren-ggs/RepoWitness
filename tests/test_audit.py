@@ -209,7 +209,7 @@ class _BatchLimitedReviewLLM(_ScriptedReviewLLM):
 
         self.calls["review"] += 1
         rule_ids = re.findall(r"RW-[A-F0-9]+", messages[0]["content"])
-        if len(rule_ids) > 6:
+        if len(rule_ids) > 8:
             return LLMResponse(
                 tool_calls=[
                     ToolCall(f"review-{self.calls['review']}", "changed_files", {})
@@ -249,7 +249,7 @@ class _SecondBatchExhaustsLLM(_BatchLimitedReviewLLM):
         tool_names = {
             schema["function"]["name"] for schema in (tools or [])
         }
-        if "contract_sources" not in tool_names and '"Rule 6."' in messages[0]["content"]:
+        if "contract_sources" not in tool_names and '"Rule 8."' in messages[0]["content"]:
             self.failed_batch_calls += 1
             if self.failed_batch_calls > 12:
                 raise AssertionError("review batch exceeded its round budget")
@@ -482,12 +482,12 @@ def test_audit_engine_isolates_and_summarizes_an_exhausted_review_batch(tmp_path
     issue = next(
         item for item in report.issues if "coverage remained incomplete" in item
     )
-    assert len(completed) == 6
-    assert len(missing) == 6
+    assert len(completed) == 8
+    assert len(missing) == 4
     assert llm.failed_batch_calls == 12
     assert "batch 2/2" in issue
-    assert "submitted 0/6" in issue
-    assert "6 remaining" in issue
+    assert "submitted 0/4" in issue
+    assert "4 remaining" in issue
     assert issue.count("RW-") == 3
 
 
