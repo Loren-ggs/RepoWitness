@@ -12,7 +12,6 @@
     ·
     <a href="README_EN.md">English</a>
     ·
-    <a href="docs/product-strategy_CN.md">产品策略</a>
   </p>
   <p>
     <img alt="PyPI version" src="https://img.shields.io/pypi/v/repowitness?label=PyPI">
@@ -57,6 +56,9 @@ RepoWitness 关注的是传统 CI 很难直接表达的**文字契约**：
 因此 RepoWitness 是现有 CI 的**补充层**，不会与测试、Lint、构建或安全扫描
 冲突。它不会偷偷再跑一遍这些命令；外部检查结果只有与同一 Snapshot 匹配时
 才会被采信。
+
+## 💡 Example｜示例
+<img width="600" height="800" alt="image" src="https://github.com/user-attachments/assets/969ae554-8523-44be-ae5d-2081a276e5e3" />
 
 ## ⚡ 60 秒接入
 
