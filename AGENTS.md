@@ -37,4 +37,6 @@
 - Tests that read repository text must specify UTF-8 explicitly, and cross-platform subprocess tests must preserve the parent environment.
 - Run composite Action Bash syntax checks only on POSIX; the Windows matrix should not treat Git Bash stdin parsing as equivalent to a GitHub runner's `shell: bash`.
 - Validate caller-workflow changes with a new PR event whose base contains the new workflow; re-running an older run does not prove that later inputs or job names were applied.
+- Partition large applicable-rule sets into bounded Review Agent batches with independent assessment collectors, so one exhausted context cannot prevent every rule from being submitted.
+- When validating Review Agent completeness, distinguish model-submitted assessments from fail-closed `UNVERIFIED` placeholders; a matching assessed-rule count alone does not prove submission coverage.
 - Run the full test suite, Ruff, and `compileall` before committing.
