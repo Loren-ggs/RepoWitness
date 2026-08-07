@@ -217,6 +217,8 @@ def main(
         print(f"RepoWitness configuration failed: {exc}", file=stderr)
         return 1
 
+    # GitHub Actions and local CLI runs converge here after argument/config
+    # resolution; everything below uses the same AuditEngine entry point.
     if engine is None:
         config = Config.from_env()
         if not config.api_key:
@@ -240,6 +242,8 @@ def main(
         )
         engine = AuditEngine(llm)
 
+    # Keep transport and configuration concerns at the CLI boundary. The core
+    # engine receives one explicit, frontend-independent request object.
     request = AuditRequest(
         repository_path=options["repository_path"],
         base_ref=options["base"],
@@ -252,6 +256,7 @@ def main(
     )
     try:
         report = engine.audit(request)
+        # Both public formats are projections of the same validated report.
         rendered = (
             render_json(report)
             if options["format"] == "json"

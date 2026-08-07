@@ -27,11 +27,15 @@ class AuditEngine:
         self._llm = llm
 
     def audit(self, request: AuditRequest) -> AuditReport:
+        # Phase 1: pin the Git revisions and enumerate the candidate changes.
         repository = RepositoryView.open(
             request.repository_path,
             base_ref=request.base_ref,
         )
         changes = tuple(repository.changed_files(include_untracked=request.include_untracked))
+
+        # Phase 2: discover contracts at the explicitly selected revision, then
+        # let the compiler submit only rules tied to issued source spans.
         contract_discovery = ContractSourceDiscovery.discover(
             repository,
             revision=request.contracts_ref,
@@ -57,6 +61,8 @@ class AuditEngine:
         contracts = contract_discovery.catalog
         contract_sources_called = contracts is not None
         if contracts is None:
+            # Fail closed to required sources when the compiler never selected
+            # optional sources; the report still retains contract provenance.
             contracts = contract_discovery.load(())
             if has_contract_candidates:
                 issues.append(
@@ -91,6 +97,8 @@ class AuditEngine:
                     f"Unresolved contract conflict {conflict.conflict_id}: "
                     f"{conflict.description}"
                 )
+        # Phase 3: applicability is deterministic; the model cannot decide
+        # which compiled rules cover the current change set.
         known_paths = tuple(
             sorted(
                 set(repository.list_files(revision="base"))
@@ -111,6 +119,8 @@ class AuditEngine:
         )
         rules = selection.applicable_rules
         issues.extend(selection.notices)
+        # Phase 4: import caller-produced checks into immutable evidence. The
+        # Review Agent can read these records but cannot execute commands.
         evidence = EvidenceStore()
         result_paths = (
             request.check_result_paths
@@ -142,6 +152,8 @@ class AuditEngine:
             len(rules) + _REVIEW_RULE_BATCH_SIZE - 1
         ) // _REVIEW_RULE_BATCH_SIZE
         if rules:
+            # Phase 5: bounded batches isolate context exhaustion and preserve
+            # assessments already submitted by earlier Review Agent runs.
             for start in range(0, len(rules), _REVIEW_RULE_BATCH_SIZE):
                 batch_rules = rules[start : start + _REVIEW_RULE_BATCH_SIZE]
                 batch_number = start // _REVIEW_RULE_BATCH_SIZE + 1
@@ -193,6 +205,8 @@ class AuditEngine:
             else:
                 issues.append("The contract compiler did not submit any actionable rules.")
 
+        # Phase 6: validate model output before report assembly; unsupported or
+        # missing conclusions become UNVERIFIED rather than trusted verdicts.
         assessments = validate_assessments(
             rules,
             evidence,

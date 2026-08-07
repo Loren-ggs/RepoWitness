@@ -124,6 +124,8 @@ runs:
             fail_on_args+=(--fail-on "${verdict}")
           fi
         done <<< "${REPOWITNESS_ACTION_FAIL_ON}"
+        # Preserve the audit status so reports can still be published before
+        # the final enforcement step turns a configured verdict into a failure.
         set +e
         repowitness audit \
           --repository "${GITHUB_WORKSPACE}" \
