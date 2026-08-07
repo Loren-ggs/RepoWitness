@@ -53,7 +53,7 @@ explicit use, but they are not registered in RepoWitness review agents.
 
 ## Current capabilities
 
-Version `0.4.1` currently supports:
+Version `0.4.2` currently supports:
 
 - `repowitness audit --base <ref>`;
 - base contracts by default, with explicit `head` and `worktree` bootstrap modes;
@@ -238,7 +238,7 @@ permissions:
 
 jobs:
   repowitness:
-    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.1
+    uses: Loren-ggs/RepoWitness/.github/workflows/repowitness.yml@v0.4.2
     with:
       fail_on: fail
     secrets:
@@ -277,7 +277,7 @@ steps:
   - uses: actions/checkout@v6
     with:
       fetch-depth: 0
-  - uses: Loren-ggs/RepoWitness@v0.4.1
+  - uses: Loren-ggs/RepoWitness@v0.4.2
     env:
       REPOWITNESS_MODEL: ${{ vars.REPOWITNESS_MODEL }}
       REPOWITNESS_BASE_URL: ${{ vars.REPOWITNESS_BASE_URL }}
